@@ -31,18 +31,27 @@ assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
 assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
 
 // Interpolate between cells
-let val = grid.get_interpolate(grid.min_x() + grid.cell_size()/2., grid.min_y() + grid.cell_size()/2.).unwrap();
+let val = grid.get_interpolate(grid.header.min_x() + grid.header.cell_size()/4).unwrap();
 
 // Iterate over every cell
-let grid_size = grid.num_rows() * grid.num_cols();
+let file = std::fs::File::open("test_data/test.asc").unwrap();
+let grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+let header = grid.header;
+let grid_size = grid.header.num_rows() * grid.header.num_cols();
 let iter = grid.into_iter();
 let mut num_elements = 0;
 for (row, col, value) in iter {
     num_elements += 1;
     if row == 3 && col == 3 {
+        let (x, y) = header.index_pos(col, row).unwrap();
+        assert_eq!(x, 390003.0);
+        assert_eq!(y, 344003.0);
         assert_eq!(value, 135.44000244140625);
     }
     if row == 0 && col == 0 {
+        let (x, y) = header.index_pos(col, row).unwrap();
+        assert_eq!(x, 390000.0);
+        assert_eq!(y, 344000.0);
         assert_eq!(value, 141.2700042724609375);
     }
 }
