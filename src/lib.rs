@@ -64,8 +64,14 @@ mod tests {
         let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
 
         // Spot check a few values
-        assert_eq!(grid.get(390_000.0, 344_000.0).unwrap(), 141.270_004_272_460_937_5);
-        assert_eq!(grid.get(390_003.0, 344_003.0).unwrap(), 135.440_002_441_406_25);
+        assert_eq!(
+            grid.get(390_000.0, 344_000.0).unwrap(),
+            141.270_004_272_460_937_5
+        );
+        assert_eq!(
+            grid.get(390_003.0, 344_003.0).unwrap(),
+            135.440_002_441_406_25
+        );
 
         // Check the bounds
         let min_x = grid.header.min_x();
@@ -194,5 +200,20 @@ mod tests {
         assert!(grid.get_interpolate(min_x, min_y - cell_size).is_none());
         assert!(grid.get_interpolate(max_x + cell_size, max_y).is_none());
         assert!(grid.get_interpolate(max_x, max_y + cell_size).is_none());
+    }
+
+    #[test]
+    fn test_many_gets() {
+        let file = std::fs::File::open("test_data/test.asc").unwrap();
+        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        for x in 0..grid.header.ncols {
+            for y in 0..grid.header.nrows {
+                let x_pos = x as f64 * grid.header.cell_size() + grid.header.min_x();
+                let y_pos = y as f64 * grid.header.cell_size() + grid.header.min_y();
+                let val = grid.get(x_pos, y_pos).unwrap();
+                let val2 = grid.get_index(y, x).unwrap();
+                assert_eq!(val, val2);
+            }
+        }
     }
 }
