@@ -62,7 +62,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         }
         let num_rows = self.header.num_rows();
         let reader = self.reader.by_ref();
-        reader.rewind()?;
+        // reader.rewind()?;
         reader.seek(std::io::SeekFrom::Start(self.data_start))?;
         let mut lines = reader.lines();
         let line = lines.nth(num_rows - 1 - row).ok_or_else(|| {
