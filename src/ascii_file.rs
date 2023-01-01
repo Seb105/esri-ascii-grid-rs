@@ -84,7 +84,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get(&mut self, x: f64, y: f64) -> Option<f64> {
-        let (row, col) = self.header.index_of(x, y)?;
+        let (col, row) = self.header.index_of(x, y)?;
         let val = self.get_index(row, col).unwrap();
         Some(val)
     }

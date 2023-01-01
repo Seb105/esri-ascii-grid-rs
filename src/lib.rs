@@ -24,7 +24,7 @@ mod tests {
         assert!(header.is_ok());
         let header = header.unwrap();
         assert_eq!(header.ncols, 2000);
-        assert_eq!(header.nrows, 2000);
+        assert_eq!(header.nrows, 1000);
         assert_eq!(header.xll as i32, 390_000);
         assert_eq!(header.yll as i32, 344_000);
         assert_eq!(header.cornertype, crate::header::CornerType::Corner);
@@ -38,7 +38,7 @@ mod tests {
         let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
         // Spot check a few values
         assert_eq!(
-            grid.get_index(1994, 7).unwrap(),
+            grid.get_index(994, 7).unwrap(),
             grid.header.no_data_value().unwrap()
         );
         assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
