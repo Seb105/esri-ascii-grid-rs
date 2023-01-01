@@ -1,13 +1,15 @@
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, Error, Lines, Read, Seek},
     vec::IntoIter,
 };
 
-use crate::header::{EsriASCIIRasterHeader};
+use crate::header::EsriASCIIRasterHeader;
 
 pub struct EsriASCIIReader<R> {
     pub header: EsriASCIIRasterHeader,
     reader: BufReader<R>,
+    line_cache: HashMap<usize, Vec<f64>>,
     data_start: u64,
 }
 impl<R: Read + Seek> EsriASCIIReader<R> {
@@ -17,7 +19,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     ///
     /// # Examples
     /// ```rust
-    /// use esri_ascii_grid_rs::ascii_file::EsriASCIIReader;
+    /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     ///
@@ -35,20 +37,28 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         Ok(Self {
             header: grid_header,
             reader,
+            line_cache: HashMap::new(),
             data_start,
         })
     }
     /// Returns the value at the given row and column.
     /// 0, 0 is the bottom left corner. The row and column are zero indexed.
-    /// 
+    ///
     /// # Errors
     /// Returns an IO error if the row or column is out of bounds or is not a valid number.
+    ///
+    /// # Panics
+    /// Panics if the row or column is out of bounds, which should not happen as they are checked in this function.
     pub fn get_index(&mut self, row: usize, col: usize) -> Result<f64, Error> {
         if row >= self.header.nrows || col >= self.header.ncols {
             return Err(Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Index out of bounds",
             ));
+        };
+        if let Some(values) = self.line_cache.get(&row) {
+            let val = values[col];
+            return Ok(val);
         }
         let num_rows = self.header.num_rows();
         let reader = self.reader.by_ref();
@@ -61,18 +71,18 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
                 format!("Invalid row at {row}"),
             )
         })??;
-        let value = line
+        let values = line
             .split_whitespace()
-            .nth(col)
-            .ok_or_else(|| {
+            .map(str::parse)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
                 Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid row, column at Row: {row} Col :{col}"),
+                    format!("Invalid number at {row}, {col}: {e}"),
                 )
-            })?
-            .parse::<f64>()
-            .map_err(|err| Error::new(std::io::ErrorKind::InvalidData, err.to_string()))?;
-        Ok(value)
+            })?;
+        self.line_cache.insert(row, values.clone());
+        Ok(values[col])
     }
     /// Returns the value at the given x and y coordinates.
     ///
@@ -80,7 +90,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// If the coordinates are outside the bounds of the raster, nothing is returned.
     ///
     /// If the coordinates are within the bounds of the raster, but not on a cell, the value of the nearest cell is returned
-    /// 
+    ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get(&mut self, x: f64, y: f64) -> Option<f64> {
@@ -95,7 +105,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// The value is interpolated from the four nearest cells.
     ///
     /// Even if the coordinates are exactly on a cell, the value is interpolated and so may or may not be the same as the value at the cell due to floating point errors.
-    /// 
+    ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get_interpolate(&mut self, x: f64, y: f64) -> Option<f64> {
@@ -140,7 +150,7 @@ impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
     ///
     /// ```rust
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let grid = esri_ascii_grid_rs::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+    /// let grid = esri_ascii_grid::ascii_file::EsriASCIIReader::from_file(file).unwrap();
     /// let grid_size = grid.header.num_rows() * grid.header.num_cols();
     /// let header = grid.header;
     /// let iter = grid.into_iter();

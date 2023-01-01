@@ -1,5 +1,5 @@
 [package]
-name = "esri_asci_grid"
+name = "esri_ascii_grid"
 version = "0.1.0"
 edition = "2021"
 authors = ["Seb Smith"]
