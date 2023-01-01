@@ -18,7 +18,7 @@ NODATA_value  -9999
 13 5 1 -9999
 ```
 
-This library uses buffer readers to negate the need to load the entire ASCII grid into memory at once. The header wil be loaded and will allow you to check the properties of the header.
+This library uses buffers to negate the need to load the entire ASCII grid into memory at once. The header will be loaded and will allow you to check the properties of the header. You can then either get specific values by index, coordinate or iterate over all points.
 
 Example usage:
 
@@ -27,15 +27,19 @@ use esri_ascii_grid_rs::ascii_file::EsriASCIIReader;
 let file = std::fs::File::open("test_data/test.asc").unwrap();
 let mut grid = EsriASCIIReader::from_file(file).unwrap();
 // Spot check a few values
-assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
-assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
+assert_eq!(
+    grid.get_index(994, 7).unwrap(),
+    grid.header.no_data_value().unwrap()
+);
+assert_eq!(grid.get(390_000.0, 344_000.0).unwrap(), 141.270_004_272_460_937_5);
+assert_eq!(grid.get(390_003.0, 344_003.0).unwrap(), 135.440_002_441_406_25);
+assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
+assert_eq!(grid.get_index(0, 0).unwrap(), 141.270_004_272_460_937_5);
 
 // Interpolate between cells
 let val = grid.get_interpolate(grid.header.min_x() + grid.header.cell_size()/4).unwrap();
 
 // Iterate over every cell
-let file = std::fs::File::open("test_data/test.asc").unwrap();
-let grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
 let header = grid.header;
 let grid_size = grid.header.num_rows() * grid.header.num_cols();
 let iter = grid.into_iter();
