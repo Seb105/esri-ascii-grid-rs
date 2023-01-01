@@ -1,0 +1,9 @@
+[package]
+name = "esri-ascii-grid-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Seb Smith"]
+description = "A library for reading ESRI Ascii grid files .asc files"
+# license = {name = "GPL-3.0", path = "LICENSE"}
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
