@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{BufRead, BufReader, Error, Lines, Read, Seek},
+    io::{BufRead, BufReader, Error, Lines, Read, Seek, SeekFrom},
     vec::IntoIter,
 };
 
@@ -10,6 +10,7 @@ pub struct EsriASCIIReader<R> {
     pub header: EsriASCIIRasterHeader,
     reader: BufReader<R>,
     line_cache: HashMap<usize, Vec<f64>>,
+    line_start_cache: Vec<u64>,
     data_start: u64,
 }
 impl<R: Read + Seek> EsriASCIIReader<R> {
@@ -38,6 +39,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
             header: grid_header,
             reader,
             line_cache: HashMap::new(),
+            line_start_cache: Vec::new(),
             data_start,
         })
     }
@@ -57,30 +59,29 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
             ));
         };
         if let Some(values) = self.line_cache.get(&row) {
+            // println!("Cache hit! {}", row);
             let val = values[col];
             return Ok(val);
         }
         let num_rows = self.header.num_rows();
         let reader = self.reader.by_ref();
-        // reader.rewind()?;
-        reader.seek(std::io::SeekFrom::Start(self.data_start))?;
-        let mut lines = reader.lines();
-        let line = lines.nth(num_rows - 1 - row).ok_or_else(|| {
-            Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid row at {row}"),
-            )
-        })??;
-        let values = line
+        if self.line_start_cache.is_empty() {
+            reader.seek(SeekFrom::Start(self.data_start))?;
+            let mut line_starts = Vec::with_capacity(num_rows);
+            while line_starts.len() < num_rows {
+                line_starts.push(reader.stream_position()?);
+                reader.lines().next().unwrap()?;
+            }
+            line_starts.reverse();
+            self.line_start_cache = line_starts;
+        }
+        let line_start = self.line_start_cache[row];
+        reader.seek(SeekFrom::Start(line_start))?;
+        let line = reader.lines().next().unwrap()?;
+        let values: Vec<f64> = line
             .split_whitespace()
-            .map(str::parse)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid number at {row}, {col}: {e}"),
-                )
-            })?;
+            .map(|s| s.parse().unwrap())
+            .collect();
         self.line_cache.insert(row, values.clone());
         Ok(values[col])
     }
