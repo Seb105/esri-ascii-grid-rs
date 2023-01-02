@@ -6,7 +6,7 @@ authors = ["Seb Smith"]
 description = "A library for reading ESRI Ascii Grid .asc files"
 license = "MIT OR Apache-2.0"
 readme = "readme.md"
-keywords = ["ESRI", "ASCII", ".asc", "grid", "raster"]
+keywords = ["ESRI", "ASCII", "asc", "grid", "raster"]
 repository = "https://github.com/Seb105/esri-ascii-grid-rs"
 
 
