@@ -20,14 +20,15 @@ NODATA_value  -9999
 
 This library uses buffers to negate the need to load the entire ASCII grid into memory at once. The header will be loaded and will allow you to check the properties of the header. You can then either get specific values by index, coordinate or iterate over all points.
 
-Example usage:
+## Usage:
 
 ```rust
-use esri_ascii_grid_rs::ascii_file::EsriASCIIReader;
+use esri_ascii_grid::ascii_file::EsriASCIIReader;
 let file = std::fs::File::open("test_data/test.asc").unwrap();
 let mut grid = EsriASCIIReader::from_file(file).unwrap();
 // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-// This will build the index and cache the file positions of each line, it will take a while for large files but will drastically increase subsequent get calls
+// This will build the index and cache the file positions of each line, it will take a while for large files 
+// but will drastically increase the speed subsequent `get` calls.
 grid.build_index().unwrap();
 // Spot check a few values
 assert_eq!(
@@ -40,7 +41,7 @@ assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
 assert_eq!(grid.get_index(0, 0).unwrap(), 141.270_004_272_460_937_5);
 
 // Interpolate between cells
-let val = grid.get_interpolate(grid.header.min_x() + grid.header.cell_size()/4).unwrap();
+let val = grid.get_interpolate(grid.header.min_x() + grid.header.cell_size()/4., grid.header.min_y() + grid.header.cell_size()/4.).unwrap();
 
 // Iterate over every cell
 let header = grid.header;
