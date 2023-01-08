@@ -77,7 +77,7 @@
     clippy::float_cmp
 )]
 pub mod ascii_file;
-mod header;
+pub mod header;
 #[cfg(test)]
 mod tests {
     use std::io::BufReader;
