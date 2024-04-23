@@ -26,7 +26,7 @@
 //! let file = std::fs::File::open("test_data/test.asc").unwrap();
 //! let mut grid = EsriASCIIReader::from_file(file).unwrap();
 //! // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-//! // This will build the index and cache the file positions of each line, it will take a while for large files 
+//! // This will build the index and cache the file positions of each line, it will take a while for large files
 //! // but will drastically increase the speed subsequent `get` calls.
 //! grid.build_index().unwrap();
 //! // Spot check a few values
@@ -64,7 +64,6 @@
 //! }
 //! assert_eq!(grid_size, num_elements);
 //! ```
-
 
 #![warn(clippy::pedantic)]
 #![allow(

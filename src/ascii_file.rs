@@ -24,7 +24,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
@@ -49,7 +49,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// Build an index of the file.
     /// This will take a while for very large files, but will make subsequent calls to `get` or any such function much faster.
     /// If you are going to be repeatedly calling and `get` on a big file it is recommended to call this function first.
-    /// 
+    ///
     /// # Errors
     /// Returns an IO error if there is some problem with the indexing, such as the file being too short.
     pub fn build_index(&mut self) -> Result<(), Error> {
@@ -60,10 +60,9 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
             let mut line_starts = Vec::with_capacity(num_rows);
             while line_starts.len() < num_rows {
                 line_starts.push(reader.stream_position()?);
-                reader.lines().next().ok_or_else(|| Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Unexpected end of file",
-                ))??;
+                reader.lines().next().ok_or_else(|| {
+                    Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected end of file")
+                })??;
             }
             line_starts.reverse();
             self.line_start_cache = line_starts;
@@ -78,7 +77,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
@@ -131,14 +130,14 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
-    /// 
+    ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get(&mut self, x: f64, y: f64) -> Option<f64> {
@@ -153,21 +152,21 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// The value is interpolated from the four nearest cells.
     ///
     /// Even if the coordinates are exactly on a cell, the value is interpolated and so may or may not be the same as the value at the cell due to floating point errors.
-    /// 
+    ///
     /// # Examples
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get_interpolate(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get_interpolate(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
-    /// 
+    ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get_interpolate(&mut self, x: f64, y: f64) -> Option<f64> {
