@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
-    io::{BufRead, BufReader, Error, Lines, Read, Seek, SeekFrom},
+    io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom},
     vec::IntoIter,
 };
 
-use crate::header::EsriASCIIRasterHeader;
+use replace_with::replace_with_or_abort;
+
+use crate::{error::Error, header::EsriASCIIRasterHeader};
 
 pub struct EsriASCIIReader<R> {
     pub header: EsriASCIIRasterHeader,
@@ -24,7 +26,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
@@ -32,9 +34,9 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
     /// # Errors
-    /// Returns an IO error if there is someghing wrong with the header, such as missing values
-    /// The IO error should give a description of the problem.
-    pub fn from_file(file: R) -> Result<Self, Error> {
+    /// Returns an error if there is something wrong with the header, such as missing values
+    /// The error should give a description of the problem.
+    pub fn from_file(file: R) -> Result<Self, crate::error::Error> {
         let mut reader = BufReader::new(file);
         let grid_header = EsriASCIIRasterHeader::from_reader(&mut reader)?;
         let data_start = reader.stream_position()?;
@@ -49,21 +51,21 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// Build an index of the file.
     /// This will take a while for very large files, but will make subsequent calls to `get` or any such function much faster.
     /// If you are going to be repeatedly calling and `get` on a big file it is recommended to call this function first.
-    /// 
+    ///
     /// # Errors
-    /// Returns an IO error if there is some problem with the indexing, such as the file being too short.
-    pub fn build_index(&mut self) -> Result<(), Error> {
+    /// Returns an error if there is some problem with the indexing, such as the file being too short.
+    pub fn build_index(&mut self) -> Result<(), crate::error::Error> {
         if self.line_cache.is_empty() {
             let num_rows = self.header.num_rows();
             let reader = self.reader.by_ref();
             reader.seek(SeekFrom::Start(self.data_start))?;
             let mut line_starts = Vec::with_capacity(num_rows);
-            while line_starts.len() < num_rows {
+            for row in 0..num_rows {
                 line_starts.push(reader.stream_position()?);
-                reader.lines().next().ok_or_else(|| Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Unexpected end of file",
-                ))??;
+                reader
+                    .lines()
+                    .next()
+                    .ok_or_else(|| crate::error::Error::MismatchedRowCount(num_rows, row))??;
             }
             line_starts.reverse();
             self.line_start_cache = line_starts;
@@ -78,7 +80,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
@@ -87,16 +89,13 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// ```
     ///
     /// # Errors
-    /// Returns an IO error if the row or column is out of bounds or is not a valid number.
+    /// Returns an error if the row or column is out of bounds or is not a valid number.
     ///
     /// # Panics
     /// Panics if the row or column is out of bounds, which should not happen as they are checked in this function.
-    pub fn get_index(&mut self, row: usize, col: usize) -> Result<f64, Error> {
+    pub fn get_index(&mut self, row: usize, col: usize) -> Result<f64, crate::error::Error> {
         if row >= self.header.nrows || col >= self.header.ncols {
-            return Err(Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Index out of bounds",
-            ));
+            Err(crate::error::Error::OutOfBounds(row, col))?
         };
         if let Some(values) = self.line_cache.get(&row) {
             let val = values[col];
@@ -131,14 +130,14 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
-    /// 
+    ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get(&mut self, x: f64, y: f64) -> Option<f64> {
@@ -153,21 +152,21 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// The value is interpolated from the four nearest cells.
     ///
     /// Even if the coordinates are exactly on a cell, the value is interpolated and so may or may not be the same as the value at the cell due to floating point errors.
-    /// 
+    ///
     /// # Examples
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
     /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files 
+    /// // This will build the index and cache the file positions of each line, it will take a while for large files
     /// // but will drastically increase the speed subsequent `get` calls.
     /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get_interpolate(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get_interpolate(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
-    /// 
+    ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get_interpolate(&mut self, x: f64, y: f64) -> Option<f64> {
@@ -203,12 +202,15 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     }
 }
 impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
-    type Item = (usize, usize, f64);
+    type Item = Result<(usize, usize, f64), Error>;
     type IntoIter = EsriASCIIRasterIntoIterator<R>;
     /// Returns an iterator over the values in the raster.
     /// The iterator will scan the raster from left to right, top to bottom.
     /// So the row will start at num_rows-1 and decrease to 0.
     /// The column will start at 0 and increase to num_cols-1.
+    ///
+    /// If an error is encountered at any point, the iterator will return an
+    /// `Err` once and halt.
     ///
     /// ```rust
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
@@ -217,7 +219,10 @@ impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
     /// let header = grid.header;
     /// let iter = grid.into_iter();
     /// let mut num_elements = 0;
-    /// for (row, col, value) in iter {
+    /// for cell in iter {
+    ///     let Ok((row, col, value)) = cell else {
+    ///         panic!("your error handler")
+    ///     };
     ///     num_elements += 1;
     ///     if row == 3 && col == 3 {
     ///         let (x, y) = header.index_pos(col, row).unwrap();
@@ -236,56 +241,144 @@ impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
     /// ```
     ///
     fn into_iter(self) -> Self::IntoIter {
-        let mut reader = self.reader;
-        reader.rewind().unwrap();
-        reader
-            .seek(std::io::SeekFrom::Start(self.data_start))
-            .unwrap();
-        let mut lines = reader.lines();
-        let line_string = lines.next().unwrap().unwrap();
-        let line = line_string
-            .split_whitespace()
-            .map(|s| s.parse::<f64>().unwrap())
-            .collect::<Vec<f64>>()
-            .into_iter();
+        let line_reader = LineReader::Uninitialized {
+            data_start: self.data_start,
+            reader: self.reader,
+        };
+
         EsriASCIIRasterIntoIterator {
             header: self.header,
-            lines,
-            line,
+            line_reader,
+            row_it: None,
             row: 0,
             col: 0,
+            terminated: false,
+        }
+    }
+}
+
+enum LineReader<R> {
+    Uninitialized {
+        data_start: u64,
+        reader: BufReader<R>,
+    },
+    Initialized {
+        lines: Lines<BufReader<R>>,
+    },
+    /// Will reach this state if an error occurs during initialization.
+    Invalid {
+        /// Temporary storage for the error.
+        error: Option<io::Error>,
+    },
+}
+impl<R: Read + Seek> Iterator for LineReader<R> {
+    type Item = Result<String, io::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // try to initialize
+        if matches!(self, Self::Uninitialized { .. }) {
+            replace_with_or_abort(self, |r| {
+                let Self::Uninitialized {
+                    data_start,
+                    mut reader,
+                } = r
+                else {
+                    unreachable!()
+                };
+                let convert = move || -> Result<Lines<BufReader<R>>, io::Error> {
+                    reader.seek(SeekFrom::Start(data_start))?;
+                    Ok(reader.lines())
+                };
+                match convert() {
+                    Ok(lines) => Self::Initialized { lines },
+                    Err(err) => Self::Invalid { error: Some(err) },
+                }
+            });
+            if let Self::Invalid { error } = self {
+                let error = error.take().unwrap();
+                return Some(Err(error));
+            }
+        }
+
+        match self {
+            Self::Uninitialized { .. } => unreachable!(),
+            Self::Invalid { .. } => {
+                // error has been returned for the previous iteration, so we halt here
+                return None;
+            }
+            Self::Initialized { lines } => lines.next(),
         }
     }
 }
 
 pub struct EsriASCIIRasterIntoIterator<R> {
     pub header: EsriASCIIRasterHeader,
-    lines: Lines<BufReader<R>>,
-    line: IntoIter<f64>,
+    line_reader: LineReader<R>,
+    row_it: Option<IntoIter<f64>>,
     row: usize,
     col: usize,
+    terminated: bool,
 }
 impl<R: Read + Seek> Iterator for EsriASCIIRasterIntoIterator<R> {
-    type Item = (usize, usize, f64);
+    type Item = Result<(usize, usize, f64), Error>;
     fn next(&mut self) -> Option<Self::Item> {
+        if self.terminated {
+            return None;
+        }
+
+        // we check this first because row_it is initialized as None
+        // we don't want to increment row index on initial pass
         if self.col >= self.header.ncols {
+            // discard current row and set indices for next row
+            let _ = self.row_it.take();
             self.row += 1;
             self.col = 0;
             if self.row >= self.header.nrows {
+                self.terminated = true;
                 return None;
             }
-            let line_string = self.lines.next().unwrap().unwrap();
-            let line = line_string
-                .split_whitespace()
-                .map(|s| s.parse::<f64>().unwrap())
-                .collect::<Vec<f64>>()
-                .into_iter();
-            self.line = line;
         }
+
+        // load new row
+        if self.row_it.is_none() {
+            match self.line_reader.next() {
+                Some(Ok(line)) => {
+                    match line
+                        .split_whitespace()
+                        .map(|s| s.parse::<f64>())
+                        .collect::<Result<Vec<_>, _>>()
+                    {
+                        Ok(row) => self.row_it = Some(row.into_iter()),
+                        Err(error) => {
+                            self.terminated = true;
+                            Some(Result::<(usize, usize, f64), Error>::Err(error.into()));
+                        }
+                    }
+                }
+                Some(Err(error)) => {
+                    self.terminated = true;
+                    return Some(Err(error.into()));
+                }
+                None => {
+                    self.terminated = true;
+                    return None;
+                }
+            }
+        }
+
         let current_col = self.col;
         let current_row = self.row;
+
+        // row_it is guaranteed to be Some here
+        let Some(value) = self.row_it.as_mut().unwrap().next() else {
+            return Some(Err(Error::MismatchColumnCount(self.header.ncols, self.col)));
+        };
         self.col += 1;
-        let value = self.line.next().unwrap();
-        Some((self.header.nrows - 1 - current_row, current_col, value))
+
+        Some(Ok((
+            self.header.nrows - 1 - current_row,
+            current_col,
+            value,
+        )))
     }
 }

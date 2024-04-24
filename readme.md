@@ -27,7 +27,7 @@ use esri_ascii_grid::ascii_file::EsriASCIIReader;
 let file = std::fs::File::open("test_data/test.asc").unwrap();
 let mut grid = EsriASCIIReader::from_file(file).unwrap();
 // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-// This will build the index and cache the file positions of each line, it will take a while for large files 
+// This will build the index and cache the file positions of each line, it will take a while for large files
 // but will drastically increase the speed subsequent `get` calls.
 grid.build_index().unwrap();
 // Spot check a few values
@@ -48,7 +48,10 @@ let header = grid.header;
 let grid_size = grid.header.num_rows() * grid.header.num_cols();
 let iter = grid.into_iter();
 let mut num_elements = 0;
-for (row, col, value) in iter {
+for cell in iter {
+    let Ok((row, col, value)) = cell else {
+        panic!("your error handler")
+    };
     num_elements += 1;
     if row == 3 && col == 3 {
         let (x, y) = header.index_pos(col, row).unwrap();
