@@ -209,6 +209,9 @@ impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
     /// So the row will start at num_rows-1 and decrease to 0.
     /// The column will start at 0 and increase to num_cols-1.
     ///
+    /// If an error is encountered at any point, the iterator will return an
+    /// `Err` once and halt.
+    ///
     /// ```rust
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let grid = esri_ascii_grid::ascii_file::EsriASCIIReader::from_file(file).unwrap();
