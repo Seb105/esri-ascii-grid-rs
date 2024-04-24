@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{BufRead, BufReader, Error, Lines, Read, Seek, SeekFrom},
+    io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom},
     vec::IntoIter,
 };
 
@@ -32,9 +32,9 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
     /// # Errors
-    /// Returns an IO error if there is someghing wrong with the header, such as missing values
-    /// The IO error should give a description of the problem.
-    pub fn from_file(file: R) -> Result<Self, Error> {
+    /// Returns an error if there is something wrong with the header, such as missing values
+    /// The error should give a description of the problem.
+    pub fn from_file(file: R) -> Result<Self, crate::error::Error> {
         let mut reader = BufReader::new(file);
         let grid_header = EsriASCIIRasterHeader::from_reader(&mut reader)?;
         let data_start = reader.stream_position()?;
@@ -51,18 +51,19 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// If you are going to be repeatedly calling and `get` on a big file it is recommended to call this function first.
     ///
     /// # Errors
-    /// Returns an IO error if there is some problem with the indexing, such as the file being too short.
-    pub fn build_index(&mut self) -> Result<(), Error> {
+    /// Returns an error if there is some problem with the indexing, such as the file being too short.
+    pub fn build_index(&mut self) -> Result<(), crate::error::Error> {
         if self.line_cache.is_empty() {
             let num_rows = self.header.num_rows();
             let reader = self.reader.by_ref();
             reader.seek(SeekFrom::Start(self.data_start))?;
             let mut line_starts = Vec::with_capacity(num_rows);
-            while line_starts.len() < num_rows {
+            for row in 0..num_rows {
                 line_starts.push(reader.stream_position()?);
-                reader.lines().next().ok_or_else(|| {
-                    Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected end of file")
-                })??;
+                reader
+                    .lines()
+                    .next()
+                    .ok_or_else(|| crate::error::Error::MismatchedRowCount(num_rows, row))??;
             }
             line_starts.reverse();
             self.line_start_cache = line_starts;
@@ -86,16 +87,13 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// ```
     ///
     /// # Errors
-    /// Returns an IO error if the row or column is out of bounds or is not a valid number.
+    /// Returns an error if the row or column is out of bounds or is not a valid number.
     ///
     /// # Panics
     /// Panics if the row or column is out of bounds, which should not happen as they are checked in this function.
-    pub fn get_index(&mut self, row: usize, col: usize) -> Result<f64, Error> {
+    pub fn get_index(&mut self, row: usize, col: usize) -> Result<f64, crate::error::Error> {
         if row >= self.header.nrows || col >= self.header.ncols {
-            return Err(Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Index out of bounds",
-            ));
+            Err(crate::error::Error::OutOfBounds(row, col))?
         };
         if let Some(values) = self.line_cache.get(&row) {
             let val = values[col];

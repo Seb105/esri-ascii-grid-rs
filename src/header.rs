@@ -1,7 +1,9 @@
 use std::{
-    io::{BufRead, BufReader, Error, Read, Seek},
+    io::{self, BufRead, BufReader, Read, Seek},
     str::FromStr,
 };
+
+use crate::error::Error;
 
 // use serde::{Serialize, Deserialize};
 
@@ -23,17 +25,19 @@ impl EsriASCIIRasterHeader {
     ) -> Result<EsriASCIIRasterHeader, Error> {
         reader.rewind()?;
         let mut lines = reader.lines();
-        let ncols = parse_header_line::<usize>(lines.next(), "ncols")
-            .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidData, "ncols invalid"))?;
-        let nrows = parse_header_line::<usize>(lines.next(), "nrows")
-            .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidData, "nrows invalid"))?;
-        let (corner_type, xll) = parse_ll(lines.next())
-            .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidData, "xll invalid"))?;
-        let (_, yll) = parse_ll(lines.next())
-            .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidData, "yll invalid"))?;
-        let cellsize = parse_header_line::<f64>(lines.next(), "cellsize")
-            .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidData, "cellsize invalid"))?;
-        let nodata_value = parse_header_line::<f64>(lines.next(), "nodata_value");
+
+        let ncols = parse_header_line(lines.next(), "ncols")?;
+        let nrows = parse_header_line(lines.next(), "nrows")?;
+
+        let (corner_type_x, xll) = parse_ll(lines.next(), "xll")?;
+        let (corner_type_y, yll) = parse_ll(lines.next(), "yll")?;
+        if corner_type_x != corner_type_y {
+            Err(Error::BrokenInvariant("corner type disagree".into()))?
+        }
+
+        let cellsize = parse_header_line(lines.next(), "cellsize")?;
+        let nodata_value = parse_header_line(lines.next(), "nodata_value").ok();
+
         Ok(Self {
             ncols,
             nrows,
@@ -41,7 +45,7 @@ impl EsriASCIIRasterHeader {
             yll,
             yur: yll + cellsize * (nrows - 1) as f64,
             xur: xll + cellsize * (ncols - 1) as f64,
-            cornertype: corner_type,
+            cornertype: corner_type_x,
             cellsize,
             nodata_value,
         })
@@ -99,33 +103,61 @@ impl EsriASCIIRasterHeader {
         Some((col, row))
     }
 }
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CornerType {
     Corner,
     Centre,
 }
-impl CornerType {
-    fn from_str(s: &str) -> Option<Self> {
+impl FromStr for CornerType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "xllcorner" | "yllcorner" => Some(Self::Corner),
-            "xllcentre" | "yllcentre" => Some(Self::Centre),
-            _ => None,
+            "xllcorner" | "yllcorner" => Ok(Self::Corner),
+            "xllcentre" | "yllcentre" => Ok(Self::Centre),
+            _ => Err(Error::ParseEnum(s.into(), "CornerType")),
         }
     }
 }
-fn parse_header_line<T: FromStr>(line: Option<Result<String, Error>>, expected: &str) -> Option<T> {
-    let line = line.and_then(Result::ok)?;
-    let split = line.split_whitespace().collect::<Vec<&str>>();
-    if expected != split.first()?.to_lowercase().as_str() {
-        return None;
+
+fn parse_header_line<T>(line: Option<Result<String, io::Error>>, expected: &str) -> Result<T, Error>
+where
+    T: FromStr,
+    Error: From<<T as FromStr>::Err>,
+{
+    let line = line.ok_or_else(|| Error::MissingField(expected.into()))??;
+    let mut tokens_it = line.split_whitespace();
+
+    let field = tokens_it
+        .next()
+        .ok_or_else(|| Error::MissingField(expected.into()))?;
+    if field.to_lowercase() != expected {
+        Err(Error::MismatchedField(expected.into(), field.into()))?
     }
-    let value = split.get(1)?.parse::<T>().ok()?;
-    Some(value)
+    let value = tokens_it
+        .next()
+        .ok_or_else(|| Error::MissingValue(expected.into()))?
+        .parse()?;
+    Ok(value)
 }
-fn parse_ll(line: Option<Result<String, Error>>) -> Option<(CornerType, f64)> {
-    let line = line.and_then(Result::ok)?;
-    let split = line.split_whitespace().collect::<Vec<&str>>();
-    let corner_type = CornerType::from_str(split.first()?)?;
-    let value = split.get(1)?.parse::<f64>().ok()?;
-    Some((corner_type, value))
+
+fn parse_ll(
+    line: Option<Result<String, io::Error>>,
+    expected_prefix: &str,
+) -> Result<(CornerType, f64), Error> {
+    let expected = format!("{expected_prefix}corner or {expected_prefix}centre");
+    let line = line.ok_or_else(|| Error::MissingField(expected.to_owned()))??;
+    let mut tokens_it = line.split_whitespace();
+
+    let field = tokens_it
+        .next()
+        .ok_or_else(|| Error::MissingField(expected.to_owned()))?;
+    let corner_type = CornerType::from_str(field)?;
+
+    let value = tokens_it
+        .next()
+        .ok_or_else(|| Error::MissingValue(expected.to_owned()))?
+        .parse()?;
+    Ok((corner_type, value))
 }
