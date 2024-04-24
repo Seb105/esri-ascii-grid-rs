@@ -47,7 +47,10 @@
 //! let grid_size = grid.header.num_rows() * grid.header.num_cols();
 //! let iter = grid.into_iter();
 //! let mut num_elements = 0;
-//! for (row, col, value) in iter {
+//! for cell in iter {
+//!     let Ok((row, col, value)) = cell else {
+//!         panic!("your error handler")
+//!     };
 //!     num_elements += 1;
 //!     if row == 3 && col == 3 {
 //!         let (x, y) = header.index_pos(col, row).unwrap();
@@ -78,7 +81,6 @@
 pub mod ascii_file;
 pub mod error;
 pub mod header;
-
 #[cfg(test)]
 mod tests {
     use std::io::BufReader;
@@ -166,7 +168,8 @@ mod tests {
         let grid_size = grid.header.num_rows() * grid.header.num_cols();
         let iter = grid.into_iter();
         let mut num_elements = 0;
-        for (row, col, value) in iter {
+        for cell in iter {
+            let (row, col, value) = cell.unwrap();
             num_elements += 1;
             if row == 3 && col == 3 {
                 let (x, y) = header.index_pos(col, row).unwrap();

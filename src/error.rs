@@ -32,6 +32,9 @@ pub enum Error {
     #[error("Expecting {0} rows; got {1}")]
     MismatchedRowCount(usize, usize),
 
+    #[error("Expecting {0} columns; got {1}")]
+    MismatchColumnCount(usize, usize),
+
     #[error("The given index ({0}, {1}) is out of bounds")]
     OutOfBounds(usize, usize),
 }

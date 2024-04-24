@@ -10,6 +10,7 @@ keywords = ["ESRI", "ASCII", "asc", "grid", "raster"]
 repository = "https://github.com/Seb105/esri-ascii-grid-rs"
 
 [dependencies]
+replace_with = "0.1.7"
 thiserror = "1.0.59"
 
 
