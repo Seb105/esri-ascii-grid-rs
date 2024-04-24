@@ -81,6 +81,9 @@
 pub mod ascii_file;
 pub mod error;
 pub mod header;
+
+pub use error::Error;
+
 #[cfg(test)]
 mod tests {
     use std::io::BufReader;
