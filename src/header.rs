@@ -20,6 +20,34 @@ pub struct EsriASCIIRasterHeader {
     pub nodata_value: Option<f64>,
 }
 impl EsriASCIIRasterHeader {
+    pub fn new(
+        ncols: usize,
+        nrows: usize,
+        xll: f64,
+        yll: f64,
+        cornertype: CornerType,
+        cellsize: f64,
+        nodata_value: Option<f64>,
+    ) -> Self {
+        let (col_run, row_run) = match cornertype {
+            CornerType::Corner => (ncols, nrows),
+            CornerType::Centre => (ncols - 1, nrows - 1),
+        };
+        let xur = xll + cellsize * col_run as f64;
+        let yur = yll + cellsize * row_run as f64;
+
+        Self {
+            ncols,
+            nrows,
+            xll,
+            yll,
+            yur,
+            xur,
+            cornertype,
+            cellsize,
+            nodata_value,
+        }
+    }
     pub(crate) fn from_reader<R: Seek + Read>(
         reader: &mut BufReader<R>,
     ) -> Result<EsriASCIIRasterHeader, Error> {
@@ -38,17 +66,15 @@ impl EsriASCIIRasterHeader {
         let cellsize = parse_header_line(lines.next(), "cellsize")?;
         let nodata_value = parse_header_line(lines.next(), "nodata_value").ok();
 
-        Ok(Self {
+        Ok(Self::new(
             ncols,
             nrows,
             xll,
             yll,
-            yur: yll + cellsize * (nrows - 1) as f64,
-            xur: xll + cellsize * (ncols - 1) as f64,
-            cornertype: corner_type_x,
+            corner_type_x,
             cellsize,
             nodata_value,
-        })
+        ))
     }
     pub fn num_rows(&self) -> usize {
         self.nrows
