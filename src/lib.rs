@@ -25,10 +25,6 @@
 //! use esri_ascii_grid::ascii_file::EsriASCIIReader;
 //! let file = std::fs::File::open("test_data/test.asc").unwrap();
 //! let mut grid = EsriASCIIReader::from_file(file).unwrap();
-//! // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-//! // This will build the index and cache the file positions of each line, it will take a while for large files
-//! // but will drastically increase the speed subsequent `get` calls.
-//! grid.build_index().unwrap();
 //! // Spot check a few values
 //! assert_eq!(
 //!     grid.get_index(994, 7).unwrap(),
@@ -293,35 +289,6 @@ mod tests {
         let file = std::fs::File::open("test_data/test.asc").unwrap();
         let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
         let header = grid.header;
-        for row in 0..grid.header.ncols {
-            for col in 0..grid.header.nrows {
-                let x_pos = row as f64 * grid.header.cell_size() + grid.header.min_x();
-                let y_pos = col as f64 * grid.header.cell_size() + grid.header.min_y();
-                let val = grid.get(x_pos, y_pos).unwrap();
-                let val2 = grid.get_index(col, row).unwrap();
-                assert_eq!(val, val2);
-                if row == 3 && col == 3 {
-                    let (x, y) = header.index_pos(col, row).unwrap();
-                    assert_eq!(x, 390_003.0);
-                    assert_eq!(y, 344_003.0);
-                    assert_eq!(val, 135.440_002_441_406_25);
-                }
-                if row == 0 && col == 0 {
-                    let (x, y) = header.index_pos(col, row).unwrap();
-                    assert_eq!(x, 390_000.0);
-                    assert_eq!(y, 344_000.0);
-                    assert_eq!(val, 141.270_004_272_460_937_5);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_many_gets_indexed() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
-        let header = grid.header;
-        grid.build_index().unwrap();
         for row in 0..grid.header.ncols {
             for col in 0..grid.header.nrows {
                 let x_pos = row as f64 * grid.header.cell_size() + grid.header.min_x();

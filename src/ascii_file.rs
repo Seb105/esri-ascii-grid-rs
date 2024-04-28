@@ -36,10 +36,6 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -65,27 +61,6 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
             },
         })
     }
-    /// Build an index of the file.
-    /// This will take a while for very large files, but will make subsequent calls to `get` or any such function much faster.
-    /// If you are going to be repeatedly calling and `get` on a big file it is recommended to call this function first.
-    ///
-    /// # Errors
-    /// Returns an error if there is some problem with the indexing, such as the file being too short.
-    pub fn build_index(&mut self) -> Result<(), crate::error::Error> {
-        // Clear any existing cache
-        self.line_start_cache = vec![None; self.header.num_rows()];
-        let num_rows = self.header.num_rows();
-        let reader = self.reader.by_ref();
-        reader.seek(SeekFrom::Start(self.data_start))?;
-        for row in (0..num_rows).rev() {
-            self.line_start_cache[row] = Some(reader.stream_position()?);
-            reader
-                .lines()
-                .next()
-                .ok_or_else(|| crate::error::Error::MismatchedRowCount(num_rows, row))??;
-        }
-        Ok(())
-    }
     /// Returns the value at the given row and column.
     /// 0, 0 is the bottom left corner. The row and column are zero indexed.
     /// # Examples
@@ -93,10 +68,6 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get_index(0, 0).unwrap(), 141.270_004_272_460_937_5);
     /// assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
@@ -145,10 +116,6 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -173,11 +140,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
+    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();;
     /// // Spot check a few values
     /// assert_eq!(grid.get_interpolate(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get_interpolate(390003.0, 344003.0).unwrap(), 135.44000244140625);
