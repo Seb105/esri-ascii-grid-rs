@@ -23,18 +23,18 @@ impl EsriASCIIRasterHeader {
     pub fn new(
         ncols: usize,
         nrows: usize,
-        xll: f64,
-        yll: f64,
+        mut xll: f64,
+        mut yll: f64,
         cornertype: CornerType,
         cellsize: f64,
         nodata_value: Option<f64>,
     ) -> Self {
-        let (col_run, row_run) = match cornertype {
-            CornerType::Corner => (ncols, nrows),
-            CornerType::Centre => (ncols - 1, nrows - 1),
-        };
-        let xur = xll + cellsize * col_run as f64;
-        let yur = yll + cellsize * row_run as f64;
+        if cornertype == CornerType::Center {
+            xll -= cellsize / 2.0;
+            yll -= cellsize / 2.0;
+        }
+        let xur = xll + cellsize * ncols as f64;
+        let yur = yll + cellsize * nrows as f64;
 
         Self {
             ncols,
@@ -100,11 +100,11 @@ impl EsriASCIIRasterHeader {
     pub fn no_data_value(&self) -> Option<f64> {
         self.nodata_value
     }
-    /// ESRI ASCII files can have either a corner or centre cell type.
+    /// ESRI ASCII files can have either a corner or center cell type.
     ///
     /// If the cell type is corner, the values are the at coordinates of the bottom left corner of the cell.
     ///
-    /// If the cell type is centre, the values are the at coordinates of the centre of the cell.
+    /// If the cell type is center, the values are the at coordinates of the center of the cell.
     pub fn corner_type(&self) -> CornerType {
         self.cornertype
     }
@@ -121,11 +121,20 @@ impl EsriASCIIRasterHeader {
     }
     /// Get the row and column index of the cell that contains the given x and y, or nothing if it is out of bounds.
     pub fn index_of(&self, x: f64, y: f64) -> Option<(usize, usize)> {
-        if x < self.min_x() || x > self.max_x() || y < self.min_y() || y > self.max_y() {
+        let max_x = self.max_x();
+        let max_y = self.max_y();
+        if x < self.min_x() || x > max_x || y < self.min_y() || y > max_y {
             return None;
         }
-        let col = ((x - self.min_x()) / self.cellsize).round() as usize;
-        let row = ((y - self.min_y()) / self.cellsize).round() as usize;
+        let mut col = ((x - self.min_x()) / self.cellsize).round() as usize;
+        let mut row = ((y - self.min_y()) / self.cellsize).round() as usize;
+        // If the point is on the upper or right edge of the raster, it is considered to be in the last cell.
+        if x == max_x {
+            col -= 1;
+        }
+        if y == max_y {
+            row -= 1;
+        }
         Some((col, row))
     }
 }
@@ -133,7 +142,7 @@ impl EsriASCIIRasterHeader {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CornerType {
     Corner,
-    Centre,
+    Center,
 }
 impl FromStr for CornerType {
     type Err = Error;
@@ -141,7 +150,7 @@ impl FromStr for CornerType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "xllcorner" | "yllcorner" => Ok(Self::Corner),
-            "xllcentre" | "yllcentre" => Ok(Self::Centre),
+            "xllcenter" | "yllcenter" => Ok(Self::Center),
             _ => Err(Error::ParseEnum(s.into(), "CornerType")),
         }
     }
@@ -172,7 +181,7 @@ fn parse_ll(
     line: Option<Result<String, io::Error>>,
     expected_prefix: &str,
 ) -> Result<(CornerType, f64), Error> {
-    let expected = format!("{expected_prefix}corner or {expected_prefix}centre");
+    let expected = format!("{expected_prefix}corner or {expected_prefix}center");
     let line = line.ok_or_else(|| Error::MissingField(expected.to_owned()))??;
     let mut tokens_it = line.split_whitespace();
 

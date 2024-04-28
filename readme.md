@@ -20,16 +20,15 @@ NODATA_value  -9999
 
 This library uses buffers to negate the need to load the entire ASCII grid into memory at once. The header will be loaded and will allow you to check the properties of the header. You can then either get specific values by index, coordinate or iterate over all points.
 
+This library will build a cache of position the start of each row without reading the data to memory as you use any 'get' method.
+Therefore, for large files the first few 'get' calls may be slow but will increase as the structure of the file is mapped out and cached.
+
 ## Usage:
 
 ```rust
 use esri_ascii_grid::ascii_file::EsriASCIIReader;
 let file = std::fs::File::open("test_data/test.asc").unwrap();
 let mut grid = EsriASCIIReader::from_file(file).unwrap();
-// Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-// This will build the index and cache the file positions of each line, it will take a while for large files
-// but will drastically increase the speed subsequent `get` calls.
-grid.build_index().unwrap();
 // Spot check a few values
 assert_eq!(
     grid.get_index(994, 7).unwrap(),

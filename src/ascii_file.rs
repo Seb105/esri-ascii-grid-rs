@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom},
     vec::IntoIter,
 };
@@ -8,12 +7,24 @@ use replace_with::replace_with_or_abort;
 
 use crate::{error::Error, header::EsriASCIIRasterHeader};
 
+struct LineSeeker {
+    line: usize,
+    position: u64,
+}
+impl LineSeeker {
+    fn update(&mut self, line: usize, position: u64) {
+        self.line = line;
+        self.position = position;
+    }
+}
+
 pub struct EsriASCIIReader<R> {
     pub header: EsriASCIIRasterHeader,
     reader: BufReader<R>,
-    line_cache: HashMap<usize, Vec<f64>>,
-    line_start_cache: Vec<u64>,
+    line_cache: Vec<Option<Vec<f64>>>,
+    line_start_cache: Vec<Option<u64>>,
     data_start: u64,
+    line_seeker: LineSeeker,
 }
 impl<R: Read + Seek> EsriASCIIReader<R> {
     /// Create a new `EsriASCIIReader` from a file.
@@ -25,10 +36,6 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -40,37 +47,19 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         let mut reader = BufReader::new(file);
         let grid_header = EsriASCIIRasterHeader::from_reader(&mut reader)?;
         let data_start = reader.stream_position()?;
+        let mut line_start_cache = vec![None; grid_header.num_rows()];
+        line_start_cache[grid_header.num_rows() - 1] = Some(data_start);
         Ok(Self {
             header: grid_header,
             reader,
-            line_cache: HashMap::new(),
-            line_start_cache: Vec::new(),
+            line_cache: vec![None; grid_header.num_rows()],
+            line_start_cache: line_start_cache,
             data_start,
+            line_seeker: LineSeeker {
+                line: grid_header.num_rows() - 1,
+                position: data_start,
+            },
         })
-    }
-    /// Build an index of the file.
-    /// This will take a while for very large files, but will make subsequent calls to `get` or any such function much faster.
-    /// If you are going to be repeatedly calling and `get` on a big file it is recommended to call this function first.
-    ///
-    /// # Errors
-    /// Returns an error if there is some problem with the indexing, such as the file being too short.
-    pub fn build_index(&mut self) -> Result<(), crate::error::Error> {
-        if self.line_cache.is_empty() {
-            let num_rows = self.header.num_rows();
-            let reader = self.reader.by_ref();
-            reader.seek(SeekFrom::Start(self.data_start))?;
-            let mut line_starts = Vec::with_capacity(num_rows);
-            for row in 0..num_rows {
-                line_starts.push(reader.stream_position()?);
-                reader
-                    .lines()
-                    .next()
-                    .ok_or_else(|| crate::error::Error::MismatchedRowCount(num_rows, row))??;
-            }
-            line_starts.reverse();
-            self.line_start_cache = line_starts;
-        };
-        Ok(())
     }
     /// Returns the value at the given row and column.
     /// 0, 0 is the bottom left corner. The row and column are zero indexed.
@@ -79,10 +68,6 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get_index(0, 0).unwrap(), 141.270_004_272_460_937_5);
     /// assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
@@ -97,42 +82,40 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         if row >= self.header.nrows || col >= self.header.ncols {
             Err(crate::error::Error::OutOfBounds(row, col))?
         };
-        if let Some(values) = self.line_cache.get(&row) {
+        if let Some(values) = &self.line_cache[row] {
             let val = values[col];
             return Ok(val);
         }
         let reader = self.reader.by_ref();
-        let line = if self.line_start_cache.is_empty() {
-            reader.seek(SeekFrom::Start(self.data_start))?;
-            reader.lines().nth(self.header.nrows - 1 - row).unwrap()?
+        let line = if let Some(line_pos) = self.line_start_cache[row] {
+            reader.seek(SeekFrom::Start(line_pos))?;
+            reader.lines().next().unwrap()?
         } else {
-            let line_start = self.line_start_cache[row];
-            reader.seek(SeekFrom::Start(line_start))?;
+            seek_to_line(reader, row, &mut self.line_seeker, &mut self.line_start_cache)?;
             reader.lines().next().unwrap()?
         };
         let values: Vec<f64> = line
             .split_whitespace()
             .map(|s| s.parse().unwrap())
             .collect();
-        self.line_cache.insert(row, values.clone());
-        Ok(values[col])
+        let ret = values[col];
+        self.line_cache[row] = Some(values);
+        Ok(ret)
     }
     /// Returns the value at the given x and y coordinates.
     ///
     ///
     /// If the coordinates are outside the bounds of the raster, nothing is returned.
     ///
-    /// If the coordinates are within the bounds of the raster, but not on a cell, the value of the nearest cell is returned
+    /// If the coordinates are within the bounds of the raster, but not on a cell, the behaviour depends on the `corner_type` of the raster.
+    /// If the `corner_type` is `Corner`, the value at the bottom left corner of the cell is returned.
+    /// If the `corner_type` is `Center`, the value at the center of the cell is returned.
     ///
     /// # Examples
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
     /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -157,11 +140,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
-    /// // Indexing the file is optional, but is recommended if you are going to be repeatedly calling any `get` function
-    /// // This will build the index and cache the file positions of each line, it will take a while for large files
-    /// // but will drastically increase the speed subsequent `get` calls.
-    /// grid.build_index().unwrap();
+    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();;
     /// // Spot check a few values
     /// assert_eq!(grid.get_interpolate(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get_interpolate(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -256,6 +235,23 @@ impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
         }
     }
 }
+fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_seeker: &mut LineSeeker, line_start_cache: &mut Vec<Option<u64>>) -> Result<(), Error> {
+    let latest_line = line_seeker.line;
+    let latest_pos = line_seeker.position;
+    reader.seek(SeekFrom::Start(latest_pos))?;
+    for i in (row..latest_line).rev() {
+        println!("seeking to line {}", i);
+        reader
+            .lines()
+            .next()
+            .ok_or_else(|| Error::MismatchedRowCount(row, i))??;
+        line_start_cache[i] = Some(reader.stream_position()?);
+
+    }
+    line_seeker.update(row, reader.stream_position()?);
+    Ok(())
+}
+
 
 enum LineReader<R> {
     Uninitialized {
