@@ -1,6 +1,6 @@
 [package]
 name = "esri_ascii_grid"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Seb Smith"]
 description = "A library for reading ESRI Ascii Grid .asc files"
