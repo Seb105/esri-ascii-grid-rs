@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom},
     vec::IntoIter,
 };
@@ -8,12 +7,24 @@ use replace_with::replace_with_or_abort;
 
 use crate::{error::Error, header::EsriASCIIRasterHeader};
 
+struct LineSeeker {
+    line: usize,
+    position: u64,
+}
+impl LineSeeker {
+    fn update(&mut self, line: usize, position: u64) {
+        self.line = line;
+        self.position = position;
+    }
+}
+
 pub struct EsriASCIIReader<R> {
     pub header: EsriASCIIRasterHeader,
     reader: BufReader<R>,
-    line_cache: HashMap<usize, Vec<f64>>,
-    line_start_cache: Vec<u64>,
+    line_cache: Vec<Option<Vec<f64>>>,
+    line_start_cache: Vec<Option<u64>>,
     data_start: u64,
+    line_seeker: LineSeeker,
 }
 impl<R: Read + Seek> EsriASCIIReader<R> {
     /// Create a new `EsriASCIIReader` from a file.
@@ -43,9 +54,13 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         Ok(Self {
             header: grid_header,
             reader,
-            line_cache: HashMap::new(),
-            line_start_cache: Vec::new(),
+            line_cache: vec![None; grid_header.num_rows()],
+            line_start_cache: vec![None; grid_header.num_rows()],
             data_start,
+            line_seeker: LineSeeker {
+                line: grid_header.num_rows() - 1,
+                position: data_start,
+            },
         })
     }
     /// Build an index of the file.
@@ -55,21 +70,18 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     /// # Errors
     /// Returns an error if there is some problem with the indexing, such as the file being too short.
     pub fn build_index(&mut self) -> Result<(), crate::error::Error> {
-        if self.line_cache.is_empty() {
-            let num_rows = self.header.num_rows();
-            let reader = self.reader.by_ref();
-            reader.seek(SeekFrom::Start(self.data_start))?;
-            let mut line_starts = Vec::with_capacity(num_rows);
-            for row in 0..num_rows {
-                line_starts.push(reader.stream_position()?);
-                reader
-                    .lines()
-                    .next()
-                    .ok_or_else(|| crate::error::Error::MismatchedRowCount(num_rows, row))??;
-            }
-            line_starts.reverse();
-            self.line_start_cache = line_starts;
-        };
+        // Clear any existing cache
+        self.line_start_cache = vec![None; self.header.num_rows()];
+        let num_rows = self.header.num_rows();
+        let reader = self.reader.by_ref();
+        reader.seek(SeekFrom::Start(self.data_start))?;
+        for row in num_rows..0 {
+            self.line_start_cache[row] = Some(reader.stream_position()?);
+            reader
+                .lines()
+                .next()
+                .ok_or_else(|| crate::error::Error::MismatchedRowCount(num_rows, row))??;
+        }
         Ok(())
     }
     /// Returns the value at the given row and column.
@@ -97,25 +109,25 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         if row >= self.header.nrows || col >= self.header.ncols {
             Err(crate::error::Error::OutOfBounds(row, col))?
         };
-        if let Some(values) = self.line_cache.get(&row) {
+        if let Some(values) = &self.line_cache[row] {
             let val = values[col];
             return Ok(val);
         }
         let reader = self.reader.by_ref();
-        let line = if self.line_start_cache.is_empty() {
-            reader.seek(SeekFrom::Start(self.data_start))?;
-            reader.lines().nth(self.header.nrows - 1 - row).unwrap()?
+        let line = if let Some(line_pos) = self.line_start_cache[row] {
+            reader.seek(SeekFrom::Start(line_pos))?;
+            reader.lines().next().unwrap()?
         } else {
-            let line_start = self.line_start_cache[row];
-            reader.seek(SeekFrom::Start(line_start))?;
+            seek_to_line(reader, row, &mut self.line_seeker, &mut self.line_start_cache)?;
             reader.lines().next().unwrap()?
         };
         let values: Vec<f64> = line
             .split_whitespace()
             .map(|s| s.parse().unwrap())
             .collect();
-        self.line_cache.insert(row, values.clone());
-        Ok(values[col])
+        let ret = values[col];
+        self.line_cache[row] = Some(values);
+        Ok(ret)
     }
     /// Returns the value at the given x and y coordinates.
     ///
@@ -258,6 +270,19 @@ impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
         }
     }
 }
+fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_seeker: &mut LineSeeker, line_start_cache: &mut Vec<Option<u64>>) -> Result<(), Error> {
+    let latest_line = line_seeker.line;
+    let latest_pos = line_seeker.position;
+    reader.seek(SeekFrom::Start(latest_pos))?;
+    for i in latest_line..row {
+        line_start_cache[i] = Some(reader.stream_position()?);
+        reader.lines().next();
+    }
+    line_start_cache[row] = Some(reader.stream_position()?);
+    line_seeker.update(row, reader.stream_position()?);
+    Ok(())
+}
+
 
 enum LineReader<R> {
     Uninitialized {
