@@ -51,11 +51,13 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         let mut reader = BufReader::new(file);
         let grid_header = EsriASCIIRasterHeader::from_reader(&mut reader)?;
         let data_start = reader.stream_position()?;
+        let mut line_start_cache = vec![None; grid_header.num_rows()];
+        line_start_cache[grid_header.num_rows() - 1] = Some(data_start);
         Ok(Self {
             header: grid_header,
             reader,
             line_cache: vec![None; grid_header.num_rows()],
-            line_start_cache: vec![None; grid_header.num_rows()],
+            line_start_cache: line_start_cache,
             data_start,
             line_seeker: LineSeeker {
                 line: grid_header.num_rows() - 1,
@@ -75,7 +77,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         let num_rows = self.header.num_rows();
         let reader = self.reader.by_ref();
         reader.seek(SeekFrom::Start(self.data_start))?;
-        for row in num_rows..0 {
+        for row in (0..num_rows).rev() {
             self.line_start_cache[row] = Some(reader.stream_position()?);
             reader
                 .lines()
@@ -274,11 +276,15 @@ fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_see
     let latest_line = line_seeker.line;
     let latest_pos = line_seeker.position;
     reader.seek(SeekFrom::Start(latest_pos))?;
-    for i in latest_line..row {
+    for i in (row..latest_line).rev() {
+        println!("seeking to line {}", i);
+        reader
+            .lines()
+            .next()
+            .ok_or_else(|| Error::MismatchedRowCount(row, i))??;
         line_start_cache[i] = Some(reader.stream_position()?);
-        reader.lines().next();
+
     }
-    line_start_cache[row] = Some(reader.stream_position()?);
     line_seeker.update(row, reader.stream_position()?);
     Ok(())
 }
