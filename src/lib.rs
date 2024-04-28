@@ -248,6 +248,17 @@ mod tests {
             .unwrap();
         assert_eq!(val2, expected2);
 
+        // At max_x and max_y there are fewer cells to interpolate with, so the interpolated value will be the same as the value as the lower left cell
+        assert_eq!(
+            grid.get_interpolate(
+                grid.header.max_x() - grid.header.cell_size() / 2.,
+                grid.header.max_y() - grid.header.cell_size() / 2.
+            )
+            .unwrap(),
+            grid.get_index(grid.header.num_rows() - 1, grid.header.num_cols() - 1)
+                .unwrap()
+        );
+
         // Bounds check
         let min_x = grid.header.min_x();
         let min_y = grid.header.min_y();
@@ -306,5 +317,86 @@ mod tests {
                 assert_eq!(val, val2);
             }
         }
+    }
+    #[test]
+    fn test_corner_types() {
+        let xll = 0.; // From the test data files.
+        let yll = 0.;
+
+        let type_corner = std::fs::File::open("test_data/test_llcorner.asc").unwrap();
+        let type_center = std::fs::File::open("test_data/test_llcenter.asc").unwrap();
+        let grid_corner = crate::ascii_file::EsriASCIIReader::from_file(type_corner).unwrap();
+        let grid_center = crate::ascii_file::EsriASCIIReader::from_file(type_center).unwrap();
+
+        let header_center = grid_center.header;
+        let header_corner = grid_corner.header;
+
+        // Assert that everything is the same except for the corner type
+        assert_eq!(header_center.ncols, header_corner.ncols);
+        assert_eq!(header_center.nrows, header_corner.nrows);
+        assert_eq!(header_center.cellsize, header_corner.cellsize);
+        assert_eq!(header_center.nodata_value, header_corner.nodata_value);
+        // Collect both iterators and confirm that they are the same
+        let iter_center = grid_center.into_iter();
+        let iter_corner = grid_corner.into_iter();
+        for (cell_center, cell_corner) in iter_center.zip(iter_corner) {
+            let (row_center, col_center, value_center) = cell_center.unwrap();
+            let (row_corner, col_corner, value_corner) = cell_corner.unwrap();
+            assert_eq!(row_center, row_corner);
+            assert_eq!(col_center, col_corner);
+            assert_eq!(value_center, value_corner);
+        }
+        // Check the bounds. If the corner type is corner, the min_x and min_y will be the same as the xll and yll
+        // Therefore, the min_x and min_y will be half a cell size smaller than the yllcentre and xllcentre
+        assert_eq!(
+            header_center.min_x(),
+            header_corner.min_x() - header_center.cell_size() / 2.0
+        );
+        assert_eq!(
+            header_center.min_y(),
+            header_corner.min_y() - header_center.cell_size() / 2.0
+        );
+
+        assert_eq!(header_center.min_x(), xll - header_center.cell_size() / 2.0);
+        assert_eq!(header_center.min_y(), yll - header_center.cell_size() / 2.0);
+
+        // However, the range covered by the grid should be the same
+        let range_x = 200.;
+        let range_y = 300.;
+        assert_eq!(header_center.max_x() - header_center.min_x(), range_x);
+        assert_eq!(header_center.max_y() - header_center.min_y(), range_y);
+        assert_eq!(header_corner.max_x() - header_corner.min_x(), range_x);
+        assert_eq!(header_corner.max_y() - header_corner.min_y(), range_y);
+
+        let type_corner = std::fs::File::open("test_data/test_llcorner.asc").unwrap();
+        let type_center = std::fs::File::open("test_data/test_llcenter.asc").unwrap();
+        let mut grid_center = crate::ascii_file::EsriASCIIReader::from_file(type_center).unwrap();
+        let mut grid_corner = crate::ascii_file::EsriASCIIReader::from_file(type_corner).unwrap();
+        // We can still get the extremes ok
+        grid_center
+            .get(header_center.min_x(), header_center.min_y())
+            .unwrap();
+        grid_center
+            .get(header_center.max_x(), header_center.max_y())
+            .unwrap();
+        grid_center
+            .get(header_center.min_x(), header_center.max_y())
+            .unwrap();
+        grid_center
+            .get(header_center.max_x(), header_center.min_y())
+            .unwrap();
+
+        grid_corner
+            .get(header_corner.min_x(), header_corner.min_y())
+            .unwrap();
+        grid_corner
+            .get(header_corner.max_x(), header_corner.max_y())
+            .unwrap();
+        grid_corner
+            .get(header_corner.min_x(), header_corner.max_y())
+            .unwrap();
+        grid_corner
+            .get(header_corner.max_x(), header_corner.min_y())
+            .unwrap();
     }
 }

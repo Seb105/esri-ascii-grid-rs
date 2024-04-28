@@ -122,7 +122,9 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     ///
     /// If the coordinates are outside the bounds of the raster, nothing is returned.
     ///
-    /// If the coordinates are within the bounds of the raster, but not on a cell, the value of the nearest cell is returned
+    /// If the coordinates are within the bounds of the raster, but not on a cell, the behaviour depends on the `corner_type` of the raster.
+    /// If the `corner_type` is `Corner`, the value at the bottom left corner of the cell is returned.
+    /// If the `corner_type` is `Center`, the value at the center of the cell is returned.
     ///
     /// # Examples
     /// ```rust
