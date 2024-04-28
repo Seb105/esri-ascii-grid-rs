@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn test_index_of() {
         let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
         assert_eq!(
             grid.header
                 .index_of(grid.header.min_x(), grid.header.min_y())

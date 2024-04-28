@@ -120,7 +120,7 @@ impl EsriASCIIRasterHeader {
         Some((x, y))
     }
     /// Get the row and column index of the cell that contains the given x and y, or nothing if it is out of bounds.
-    pub fn index_of(&mut self, x: f64, y: f64) -> Option<(usize, usize)> {
+    pub fn index_of(&self, x: f64, y: f64) -> Option<(usize, usize)> {
         if x < self.min_x() || x > self.max_x() || y < self.min_y() || y > self.max_y() {
             return None;
         }
