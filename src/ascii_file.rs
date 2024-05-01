@@ -240,7 +240,6 @@ fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_see
     let latest_pos = line_seeker.position;
     reader.seek(SeekFrom::Start(latest_pos))?;
     for i in (row..latest_line).rev() {
-        println!("seeking to line {}", i);
         reader
             .lines()
             .next()
