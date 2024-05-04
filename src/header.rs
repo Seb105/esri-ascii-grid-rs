@@ -10,11 +10,11 @@ use std::{
 };
 
 // use serde::{Serialize, Deserialize};
-pub trait Numerical: FromStr<Err = <Self as Numerical>::Err> + Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + NumCast + PartialOrd + PartialEq + Clone + Copy {
+pub trait Numerical: FromStr<Err = <Self as Numerical>::Err> + Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + NumCast + PartialOrd + PartialEq + Clone + Copy + Debug {
     type Err: Debug;
 }
 impl<T>Numerical for T 
-where T: Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + FromStr + NumCast + PartialOrd + PartialEq + Clone + Copy, 
+where T: Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + FromStr + NumCast + PartialOrd + PartialEq + Clone + Copy + Debug,
 <T as FromStr>::Err: Debug,  error::Error: From<<T as FromStr>::Err>
 {
     type Err = <T as FromStr>::Err;
@@ -185,11 +185,13 @@ where
     if field.to_lowercase() != expected {
         Err(Error::MismatchedField(expected.into(), field.into()))?
     }
-    let value = tokens_it
+    let val_str = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingValue(expected.into()))?
-        .parse()?;
-    Ok(value)
+        .ok_or_else(|| Error::MissingValue(expected.into()))?;
+    let value:Result<T, _> = val_str
+        .parse()
+        .map_err(|_| Error::TypeCast(val_str.into(), field.into(), std::any::type_name::<T>()));
+    value
 }
 
 fn parse_ll<T>(
@@ -200,18 +202,20 @@ where
     T: FromStr,
     Error: From<<T as FromStr>::Err>,
 {
-    let expected = format!("{expected_prefix}corner or {expected_prefix}center");
-    let line = line.ok_or_else(|| Error::MissingField(expected.to_owned()))??;
+    let expected_prefix = format!("{expected_prefix}corner or {expected_prefix}center");
+    let line = line.ok_or_else(|| Error::MissingField(expected_prefix.to_owned()))??;
     let mut tokens_it = line.split_whitespace();
 
     let field = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingField(expected.to_owned()))?;
+        .ok_or_else(|| Error::MissingField(expected_prefix.to_owned()))?;
     let corner_type = CornerType::from_str(field)?;
 
-    let value = tokens_it
+    let value_str = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingValue(expected.to_owned()))?
-        .parse()?;
+        .ok_or_else(|| Error::MissingValue(expected_prefix.to_owned()))?;
+    let value = value_str
+        .parse()
+        .map_err(|_| Error::TypeCast(value_str.into(), field.into(), std::any::type_name::<T>()))?;
     Ok((corner_type, value))
 }

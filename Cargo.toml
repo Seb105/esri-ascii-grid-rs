@@ -9,6 +9,10 @@ readme = "readme.md"
 keywords = ["ESRI", "ASCII", "asc", "grid", "raster"]
 repository = "https://github.com/Seb105/esri-ascii-grid-rs"
 
+[profile.dev]
+# Full backtraces in debug mode
+debug = true
+
 [dependencies]
 num-traits = "0.2.19"
 replace_with = "0.1.7"

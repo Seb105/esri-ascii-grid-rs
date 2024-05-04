@@ -83,9 +83,9 @@ pub use error::Error;
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufReader};
+    use std::{fs::File, io::{BufReader, Read, Seek}};
 
-    use crate::{ascii_file::EsriASCIIReader, header::EsriASCIIRasterHeader};
+    use crate::{ascii_file::EsriASCIIReader, error, header::{EsriASCIIRasterHeader, Numerical}};
 
     #[test]
     fn test_header() {
@@ -392,5 +392,95 @@ mod tests {
         grid_corner
             .get(header_corner.max_x(), header_corner.min_y())
             .unwrap();
+    }
+    #[test]
+    fn test_generics() {
+        // std::env::set_var("RUST_BACKTRACE", "full");
+        struct MultipleGrids<R, A, B, C, D, E, F>
+        where
+            R: Read + Seek,
+            A: Numerical,
+            B: Numerical,
+            C: Numerical,
+            D: Numerical,
+            E: Numerical,
+            F: Numerical,
+        {
+            grid_a: EsriASCIIReader<R, A>,
+            grid_b: EsriASCIIReader<R, B>,
+            grid_c: EsriASCIIReader<R, C>,
+            grid_d: EsriASCIIReader<R, D>,
+            grid_e: EsriASCIIReader<R, E>,
+            grid_f: EsriASCIIReader<R, F>,
+        }
+        impl<R, A, B, C, D, E, F> MultipleGrids<R, A, B, C, D, E, F>
+        where
+            R: Read + Seek,
+            A: Numerical, error::Error: From<<A as Numerical>::Err>,
+            B: Numerical, error::Error: From<<B as Numerical>::Err>,
+            C: Numerical, error::Error: From<<C as Numerical>::Err>,
+            D: Numerical, error::Error: From<<D as Numerical>::Err>,
+            E: Numerical, error::Error: From<<E as Numerical>::Err>,
+            F: Numerical, error::Error: From<<F as Numerical>::Err>,
+        {
+            fn new(
+                grid_a: EsriASCIIReader<R, A>,
+                grid_b: EsriASCIIReader<R, B>,
+                grid_c: EsriASCIIReader<R, C>,
+                grid_d: EsriASCIIReader<R, D>,
+                grid_e: EsriASCIIReader<R, E>,
+                grid_f: EsriASCIIReader<R, F>,
+            ) -> Self {
+                Self {
+                    grid_a,
+                    grid_b,
+                    grid_c,
+                    grid_d,
+                    grid_e,
+                    grid_f,
+                }
+            }
+            fn get_all(&mut self, x: f64, y: f64) -> (A, B, C, D, E, F) {
+                let a = self.grid_a.get(A::from(x).unwrap(), A::from(y).unwrap()).unwrap();
+                let b = self.grid_b.get(B::from(x).unwrap(), B::from(y).unwrap()).unwrap();
+                let c = self.grid_c.get(C::from(x).unwrap(), C::from(y).unwrap()).unwrap();
+                let d = self.grid_d.get(D::from(x).unwrap(), D::from(y).unwrap()).unwrap();
+                let e = self.grid_e.get(E::from(x).unwrap(), E::from(y).unwrap()).unwrap();
+                let f = self.grid_f.get(F::from(x).unwrap(), F::from(y).unwrap()).unwrap();
+                return (a, b, c, d, e, f);
+            }
+            fn compare_to(&mut self, x: f64, y: f64, value: f64) {
+                let (a, b, c, d, e, f) = self.get_all(x, y);
+                assert_eq!(a, A::from(value).unwrap());
+                assert_eq!(b, B::from(value).unwrap());
+                assert_eq!(c, C::from(value).unwrap());
+                assert_eq!(d, D::from(value).unwrap());
+                assert_eq!(e, E::from(value).unwrap());
+                assert_eq!(f, F::from(value).unwrap());
+            }
+        }
+        let test_path = "test_data/test_ints.asc";
+        let fa = File::open(test_path).unwrap();
+        let fb = File::open(test_path).unwrap();
+        let fc = File::open(test_path).unwrap();
+        let fd = File::open(test_path).unwrap();
+        let fe = File::open(test_path).unwrap();
+        let ff = File::open(test_path).unwrap();
+        let grid_i16: EsriASCIIReader<File, i16> = EsriASCIIReader::from_file(fa).unwrap();
+        let grid_i32: EsriASCIIReader<File, i32> = EsriASCIIReader::from_file(fb).unwrap();
+        let grid_i128: EsriASCIIReader<File, i128> = EsriASCIIReader::from_file(fc).unwrap();
+        let grid_i64: EsriASCIIReader<File, i64> = EsriASCIIReader::from_file(fd).unwrap();
+        let grid_f32: EsriASCIIReader<File, f32> = EsriASCIIReader::from_file(fe).unwrap();
+        let grid_f64: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(ff).unwrap();
+        let mut multiple_grids = MultipleGrids::new(
+            grid_i16,
+            grid_i32,
+            grid_i64,
+            grid_i128,
+            grid_f32,
+            grid_f64,
+        );
+        // Check that we can get all the values
+        multiple_grids.compare_to(100., 150., 35.);
     }
 }

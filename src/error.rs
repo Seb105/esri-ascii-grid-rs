@@ -37,4 +37,7 @@ pub enum Error {
 
     #[error("The given index ({0}, {1}) is out of bounds")]
     OutOfBounds(usize, usize),
+    
+    #[error("The value {0} in {1} cannot be represented as type {2}")]
+    TypeCast(String, String, &'static str),
 }
