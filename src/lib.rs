@@ -23,8 +23,8 @@
 //!
 //! ```rust
 //! use esri_ascii_grid::ascii_file::EsriASCIIReader;
-//! let file = std::fs::File::open("test_data/test.asc").unwrap();
-//! let mut grid = EsriASCIIReader::from_file(file).unwrap();
+//! let file = File::open("test_data/test.asc").unwrap();
+//! let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
 //! // Spot check a few values
 //! assert_eq!(
 //!     grid.get_index(994, 7).unwrap(),
@@ -82,13 +82,13 @@ pub use error::Error;
 
 #[cfg(test)]
 mod tests {
-    use std::io::BufReader;
+    use std::{fs::File, io::BufReader};
 
-    use crate::header::EsriASCIIRasterHeader;
+    use crate::{ascii_file::EsriASCIIReader, header::EsriASCIIRasterHeader};
 
     #[test]
     fn test_header() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
         let mut reader = BufReader::new(file);
         let header = EsriASCIIRasterHeader::from_reader(&mut reader);
         assert!(header.is_ok());
@@ -104,8 +104,8 @@ mod tests {
 
     #[test]
     fn test_get_index() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
+        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         // Spot check a few values
         assert_eq!(
             grid.get_index(994, 7).unwrap(),
@@ -130,8 +130,8 @@ mod tests {
 
     #[test]
     fn test_get() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
+        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
 
         // Spot check a few values
         assert_eq!(
@@ -161,8 +161,8 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
+        let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         let header = grid.header;
         let grid_size = grid.header.num_rows() * grid.header.num_cols();
         let iter = grid.into_iter();
@@ -188,8 +188,8 @@ mod tests {
 
     #[test]
     fn test_index_of() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
+        let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         assert_eq!(
             grid.header
                 .index_of(grid.header.min_x(), grid.header.min_y())
@@ -218,8 +218,8 @@ mod tests {
 
     #[test]
     fn test_get_interp() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
+        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         let ll = grid.get_index(0, 0).unwrap();
         let lr = grid.get_index(0, 1).unwrap();
         let ul = grid.get_index(1, 0).unwrap();
@@ -286,8 +286,8 @@ mod tests {
 
     #[test]
     fn test_many_gets() {
-        let file = std::fs::File::open("test_data/test.asc").unwrap();
-        let mut grid = crate::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+        let file = File::open("test_data/test.asc").unwrap();
+        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         let header = grid.header;
         for row in 0..grid.header.ncols {
             for col in 0..grid.header.nrows {
@@ -316,10 +316,10 @@ mod tests {
         let xll = 0.; // From the test data files.
         let yll = 0.;
 
-        let type_corner = std::fs::File::open("test_data/test_llcorner.asc").unwrap();
-        let type_center = std::fs::File::open("test_data/test_llcenter.asc").unwrap();
-        let grid_corner = crate::ascii_file::EsriASCIIReader::from_file(type_corner).unwrap();
-        let grid_center = crate::ascii_file::EsriASCIIReader::from_file(type_center).unwrap();
+        let type_corner = File::open("test_data/test_llcorner.asc").unwrap();
+        let type_center = File::open("test_data/test_llcenter.asc").unwrap();
+        let grid_corner: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_corner).unwrap();
+        let grid_center: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_center).unwrap();
 
         let header_center = grid_center.header;
         let header_corner = grid_corner.header;
@@ -361,10 +361,10 @@ mod tests {
         assert_eq!(header_corner.max_x() - header_corner.min_x(), range_x);
         assert_eq!(header_corner.max_y() - header_corner.min_y(), range_y);
 
-        let type_corner = std::fs::File::open("test_data/test_llcorner.asc").unwrap();
-        let type_center = std::fs::File::open("test_data/test_llcenter.asc").unwrap();
-        let mut grid_center = crate::ascii_file::EsriASCIIReader::from_file(type_center).unwrap();
-        let mut grid_corner = crate::ascii_file::EsriASCIIReader::from_file(type_corner).unwrap();
+        let type_corner = File::open("test_data/test_llcorner.asc").unwrap();
+        let type_center = File::open("test_data/test_llcenter.asc").unwrap();
+        let mut grid_center: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_center).unwrap();
+        let mut grid_corner: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_corner).unwrap();
         // We can still get the extremes ok
         grid_center
             .get(header_center.min_x(), header_center.min_y())

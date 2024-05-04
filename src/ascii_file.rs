@@ -1,11 +1,11 @@
 use std::{
-    io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom},
-    vec::IntoIter,
+    io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom}, vec::IntoIter
 };
 
+use num_traits::NumCast;
 use replace_with::replace_with_or_abort;
 
-use crate::{error::Error, header::EsriASCIIRasterHeader};
+use crate::{error::{self, Error}, header::{EsriASCIIRasterHeader, Numerical}};
 
 struct LineSeeker {
     line: usize,
@@ -18,15 +18,17 @@ impl LineSeeker {
     }
 }
 
-pub struct EsriASCIIReader<R> {
-    pub header: EsriASCIIRasterHeader,
+pub struct EsriASCIIReader<R, T: Numerical> {
+    pub header: EsriASCIIRasterHeader<T>,
     reader: BufReader<R>,
-    line_cache: Vec<Option<Vec<f64>>>,
+    line_cache: Vec<Option<Vec<T>>>,
     line_start_cache: Vec<Option<u64>>,
     data_start: u64,
     line_seeker: LineSeeker,
 }
-impl<R: Read + Seek> EsriASCIIReader<R> {
+impl<R: Read + Seek, T: Numerical> EsriASCIIReader<R, T> 
+where T: Numerical, error::Error: From<<T as Numerical>::Err>
+{
     /// Create a new `EsriASCIIReader` from a file.
     ///
     /// When creating the file, only the header is read.
@@ -78,7 +80,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     ///
     /// # Panics
     /// Panics if the row or column is out of bounds, which should not happen as they are checked in this function.
-    pub fn get_index(&mut self, row: usize, col: usize) -> Result<f64, crate::error::Error> {
+    pub fn get_index(&mut self, row: usize, col: usize) -> Result<T, crate::error::Error> {
         if row >= self.header.nrows || col >= self.header.ncols {
             Err(crate::error::Error::OutOfBounds(row, col))?
         };
@@ -94,7 +96,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
             seek_to_line(reader, row, &mut self.line_seeker, &mut self.line_start_cache)?;
             reader.lines().next().unwrap()?
         };
-        let values: Vec<f64> = line
+        let values: Vec<T> = line
             .split_whitespace()
             .map(|s| s.parse().unwrap())
             .collect();
@@ -123,7 +125,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
-    pub fn get(&mut self, x: f64, y: f64) -> Option<f64> {
+    pub fn get(&mut self, x: T, y: T) -> Option<T> {
         let (col, row) = self.header.index_of(x, y)?;
         let val = self.get_index(row, col).unwrap();
         Some(val)
@@ -148,7 +150,7 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
     ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
-    pub fn get_interpolate(&mut self, x: f64, y: f64) -> Option<f64> {
+    pub fn get_interpolate(&mut self, x: T, y: T) -> Option<T> {
         if x < self.header.min_x()
             || x > self.header.max_x()
             || y < self.header.min_y()
@@ -156,33 +158,38 @@ impl<R: Read + Seek> EsriASCIIReader<R> {
         {
             return None;
         }
-        let ll_col = (((x - self.header.min_x()) / self.header.cellsize).floor() as usize)
+        let ll_col =  <usize as NumCast>::from((x - self.header.min_x()) / self.header.cellsize).unwrap()
             .min(self.header.ncols - 2);
-        let ll_row = (((y - self.header.min_y()) / self.header.cellsize).floor() as usize)
+        let ll_row =  <usize as NumCast>::from((y - self.header.min_y()) / self.header.cellsize).unwrap()
             .min(self.header.nrows - 2);
 
         let (ll_x, ll_y) = self.header.index_pos(ll_row, ll_col).unwrap();
 
-        let ll = self.get_index(ll_row, ll_col).unwrap();
-        let lr = self.get_index(ll_row, ll_col + 1).unwrap();
-        let ul = self.get_index(ll_row + 1, ll_col).unwrap();
-        let ur = self.get_index(ll_row + 1, ll_col + 1).unwrap();
+        let ll= <f64 as NumCast>::from(self.get_index(ll_row, ll_col).unwrap()).unwrap();
+        let lr= <f64 as NumCast>::from(self.get_index(ll_row, ll_col + 1).unwrap()).unwrap();
+        let ul= <f64 as NumCast>::from(self.get_index(ll_row + 1, ll_col).unwrap()).unwrap();
+        let ur= <f64 as NumCast>::from(self.get_index(ll_row + 1, ll_col + 1).unwrap()).unwrap();
 
-        let vert_weight = (x - ll_x) / self.header.cell_size();
-        let horiz_weight = (y - ll_y) / self.header.cell_size();
+        let cell_size = <f64 as NumCast>::from(self.header.cell_size()).unwrap();
+        let vert_weight = <f64 as NumCast>::from(x - ll_x).unwrap() / cell_size;
+        let horiz_weight = <f64 as NumCast>::from(y - ll_y).unwrap() / cell_size;
 
         let ll_weight = (1.0 - vert_weight) * (1.0 - horiz_weight);
         let ur_weight = vert_weight * horiz_weight;
         let ul_weight = (1.0 - vert_weight) * horiz_weight;
         let lr_weight = vert_weight * (1.0 - horiz_weight);
 
-        let value = ul * ul_weight + ur * ur_weight + ll * ll_weight + lr * lr_weight;
-        Some(value)
+        let value: f64 = ul * ul_weight + ur * ur_weight + ll * ll_weight + lr * lr_weight;
+        Some(T::from(value).unwrap())
     }
 }
-impl<R: Read + Seek> IntoIterator for EsriASCIIReader<R> {
-    type Item = Result<(usize, usize, f64), Error>;
-    type IntoIter = EsriASCIIRasterIntoIterator<R>;
+impl<R, T> IntoIterator for EsriASCIIReader<R, T> 
+where
+    R: Read + Seek,
+    T: Numerical, error::Error: From<<T as Numerical>::Err>    
+{
+    type Item = Result<(usize, usize, T), Error>;
+    type IntoIter = EsriASCIIRasterIntoIterator<R, T>;
     /// Returns an iterator over the values in the raster.
     /// The iterator will scan the raster from left to right, top to bottom.
     /// So the row will start at num_rows-1 and decrease to 0.
@@ -306,16 +313,20 @@ impl<R: Read + Seek> Iterator for LineReader<R> {
     }
 }
 
-pub struct EsriASCIIRasterIntoIterator<R> {
-    pub header: EsriASCIIRasterHeader,
+pub struct EsriASCIIRasterIntoIterator<R, T: Numerical> {
+    pub header: EsriASCIIRasterHeader<T>,
     line_reader: LineReader<R>,
-    row_it: Option<IntoIter<f64>>,
+    row_it: Option<IntoIter<T>>,
     row: usize,
     col: usize,
     terminated: bool,
 }
-impl<R: Read + Seek> Iterator for EsriASCIIRasterIntoIterator<R> {
-    type Item = Result<(usize, usize, f64), Error>;
+impl<R, T> Iterator for EsriASCIIRasterIntoIterator<R, T>
+where 
+    R: Read + Seek, 
+    T: Numerical, error::Error: From<<T as Numerical>::Err>
+{
+    type Item = Result<(usize, usize, T), Error>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.terminated {
             return None;
@@ -340,13 +351,13 @@ impl<R: Read + Seek> Iterator for EsriASCIIRasterIntoIterator<R> {
                 Some(Ok(line)) => {
                     match line
                         .split_whitespace()
-                        .map(|s| s.parse::<f64>())
+                        .map(|s| s.parse::<T>())
                         .collect::<Result<Vec<_>, _>>()
                     {
                         Ok(row) => self.row_it = Some(row.into_iter()),
                         Err(error) => {
                             self.terminated = true;
-                            Some(Result::<(usize, usize, f64), Error>::Err(error.into()));
+                            Some(Result::<(usize, usize, T), Error>::Err(error.into()));
                         }
                     }
                 }

@@ -10,8 +10,7 @@ keywords = ["ESRI", "ASCII", "asc", "grid", "raster"]
 repository = "https://github.com/Seb105/esri-ascii-grid-rs"
 
 [dependencies]
+num-traits = "0.2.19"
 replace_with = "0.1.7"
 thiserror = "1.0.59"
-
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
