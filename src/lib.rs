@@ -22,6 +22,7 @@
 //! ## Usage:
 //!
 //! ```rust
+//! use std::fs::File;
 //! use esri_ascii_grid::ascii_file::EsriASCIIReader;
 //! let file = File::open("test_data/test.asc").unwrap();
 //! let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();

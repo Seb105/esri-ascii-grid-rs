@@ -67,9 +67,10 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     /// 0, 0 is the bottom left corner. The row and column are zero indexed.
     /// # Examples
     /// ```rust
+    /// use std::fs::File;
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
-    /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
+    /// let file = File::open("test_data/test.asc").unwrap();
+    /// let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get_index(0, 0).unwrap(), 141.270_004_272_460_937_5);
     /// assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
@@ -199,8 +200,10 @@ where
     /// `Err` once and halt.
     ///
     /// ```rust
-    /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let grid = esri_ascii_grid::ascii_file::EsriASCIIReader::from_file(file).unwrap();
+    /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
+    /// use std::fs::File;
+    /// let file = File::open("test_data/test.asc").unwrap();
+    /// let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
     /// let grid_size = grid.header.num_rows() * grid.header.num_cols();
     /// let header = grid.header;
     /// let iter = grid.into_iter();
