@@ -4,9 +4,7 @@ use num_traits::{
     NumCast, NumRef,
 };
 use std::{
-    io::{self, BufRead, BufReader, Read, Seek},
-    str::FromStr,
-    fmt::Debug
+    fmt::Debug, io::{self, BufRead, BufReader, Read, Seek}, str::FromStr
 };
 
 // use serde::{Serialize, Deserialize};
@@ -20,8 +18,20 @@ where T: Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + Fr
     type Err = <T as FromStr>::Err;
 }
 
+/// A reader for ESRI ASCII raster files.
+/// This reader reads the header of the file and then reads the data on demand.
+/// The data is cached in memory, so that the file is only read once.
+/// 
+/// # Type Parameters
+/// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
+/// * `T` - The type of the coordinates. Should be a number.
+/// * `U` - The type of the height values in the grid. Should be a number
 #[derive(Debug, Clone, Copy)]
-pub struct EsriASCIIRasterHeader<T: Numerical> {
+pub struct EsriASCIIRasterHeader<T, U> 
+where
+    T: Numerical,
+    U: Numerical
+{
     pub ncols: usize,
     pub nrows: usize,
     pub xll: T,
@@ -30,9 +40,12 @@ pub struct EsriASCIIRasterHeader<T: Numerical> {
     pub xur: T,
     pub cornertype: CornerType,
     pub cellsize: T,
-    pub nodata_value: Option<T>,
+    pub nodata_value: Option<U>,
 }
-impl<T: Numerical> EsriASCIIRasterHeader<T> where error::Error: From<<T as Numerical>::Err>
+impl<T, U> EsriASCIIRasterHeader<T, U> 
+where 
+    T: Numerical, error::Error: From<<T as Numerical>::Err>,
+    U: Numerical, error::Error: From<<U as Numerical>::Err>
 {
     pub fn new(
         ncols: usize,
@@ -41,7 +54,7 @@ impl<T: Numerical> EsriASCIIRasterHeader<T> where error::Error: From<<T as Numer
         mut yll: T,
         cornertype: CornerType,
         cellsize: T,
-        nodata_value: Option<T>,
+        nodata_value: Option<U>,
     ) -> Self {
         let two: T = T::from(2).unwrap();
         if cornertype == CornerType::Center {
@@ -65,7 +78,7 @@ impl<T: Numerical> EsriASCIIRasterHeader<T> where error::Error: From<<T as Numer
     }
     pub(crate) fn from_reader<R: Seek + Read>(
         reader: &mut BufReader<R>,
-    ) -> Result<EsriASCIIRasterHeader<T>, Error> {
+    ) -> Result<EsriASCIIRasterHeader<T, U>, Error> {
         reader.rewind()?;
         let mut lines = reader.lines();
 
@@ -112,7 +125,7 @@ impl<T: Numerical> EsriASCIIRasterHeader<T> where error::Error: From<<T as Numer
     pub fn cell_size(&self) -> T {
         self.cellsize
     }
-    pub fn no_data_value(&self) -> Option<T> {
+    pub fn no_data_value(&self) -> Option<U> {
         self.nodata_value
     }
     /// ESRI ASCII files can have either a corner or center cell type.

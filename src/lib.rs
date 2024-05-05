@@ -25,7 +25,7 @@
 //! use std::fs::File;
 //! use esri_ascii_grid::ascii_file::EsriASCIIReader;
 //! let file = File::open("test_data/test.asc").unwrap();
-//! let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+//! let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
 //! // Spot check a few values
 //! assert_eq!(
 //!     grid.get_index(5, 7).unwrap(),
@@ -93,7 +93,7 @@ mod tests {
         let mut reader = BufReader::new(file);
         let header = EsriASCIIRasterHeader::from_reader(&mut reader);
         assert!(header.is_ok());
-        let header = header.unwrap();
+        let header: EsriASCIIRasterHeader<f64, f64> = header.unwrap();
         assert_eq!(header.ncols, 2000);
         assert_eq!(header.nrows, 1000);
         assert_eq!(header.xll as i32, 390_000);
@@ -106,7 +106,7 @@ mod tests {
     #[test]
     fn test_get_index() {
         let file = File::open("test_data/test.asc").unwrap();
-        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
         // Spot check a few values
         assert_eq!(
             grid.get_index(6, 7).unwrap(),
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn test_get() {
         let file = File::open("test_data/test.asc").unwrap();
-        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
 
         // Spot check a few values
         assert_eq!(
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let file = File::open("test_data/test.asc").unwrap();
-        let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
         let header = grid.header;
         let grid_size = grid.header.num_rows() * grid.header.num_cols();
         let iter = grid.into_iter();
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn test_index_pos() {
         let file = File::open("test_data/test.asc").unwrap();
-        let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
         let cell_size = grid.header.cell_size();
         // - cell_size because max_x/y is the top right corner of the cell, but the index_pos is the bottom left corner
         let max_index_x = grid.header.max_x() - cell_size;
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn test_index_of() {
         let file = File::open("test_data/test.asc").unwrap();
-        let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
         assert_eq!(
             grid.header
                 .index_of(grid.header.min_x(), grid.header.min_y())
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_get_interp() {
         let file = File::open("test_data/test.asc").unwrap();
-        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
         let ll = grid.get_index(999, 0).unwrap();
         let lr = grid.get_index(999, 1).unwrap();
         let ul = grid.get_index(998, 0).unwrap();
@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn test_many_gets() {
         let file = File::open("test_data/test.asc").unwrap();
-        let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
         let header = grid.header;
         for row in 0..grid.header.nrows {
             for col in 0..grid.header.ncols {
@@ -346,8 +346,8 @@ mod tests {
 
         let type_corner = File::open("test_data/test_llcorner.asc").unwrap();
         let type_center = File::open("test_data/test_llcenter.asc").unwrap();
-        let grid_corner: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_corner).unwrap();
-        let grid_center: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_center).unwrap();
+        let grid_corner: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(type_corner).unwrap();
+        let grid_center: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(type_center).unwrap();
 
         let header_center = grid_center.header;
         let header_corner = grid_corner.header;
@@ -391,8 +391,8 @@ mod tests {
 
         let type_corner = File::open("test_data/test_llcorner.asc").unwrap();
         let type_center = File::open("test_data/test_llcenter.asc").unwrap();
-        let mut grid_center: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_center).unwrap();
-        let mut grid_corner: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(type_corner).unwrap();
+        let mut grid_center: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(type_center).unwrap();
+        let mut grid_corner: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(type_corner).unwrap();
         // We can still get the extremes ok
         grid_center
             .get(header_center.min_x(), header_center.min_y())
@@ -433,12 +433,12 @@ mod tests {
             E: Numerical,
             F: Numerical,
         {
-            grid_a: EsriASCIIReader<R, A>,
-            grid_b: EsriASCIIReader<R, B>,
-            grid_c: EsriASCIIReader<R, C>,
-            grid_d: EsriASCIIReader<R, D>,
-            grid_e: EsriASCIIReader<R, E>,
-            grid_f: EsriASCIIReader<R, F>,
+            grid_a: EsriASCIIReader<R, A, A>,
+            grid_b: EsriASCIIReader<R, B, B>,
+            grid_c: EsriASCIIReader<R, C, C>,
+            grid_d: EsriASCIIReader<R, D, D>,
+            grid_e: EsriASCIIReader<R, E, E>,
+            grid_f: EsriASCIIReader<R, F, F>,
         }
         impl<R, A, B, C, D, E, F> MultipleGrids<R, A, B, C, D, E, F>
         where
@@ -451,12 +451,12 @@ mod tests {
             F: Numerical, error::Error: From<<F as Numerical>::Err>,
         {
             fn new(
-                grid_a: EsriASCIIReader<R, A>,
-                grid_b: EsriASCIIReader<R, B>,
-                grid_c: EsriASCIIReader<R, C>,
-                grid_d: EsriASCIIReader<R, D>,
-                grid_e: EsriASCIIReader<R, E>,
-                grid_f: EsriASCIIReader<R, F>,
+                grid_a: EsriASCIIReader<R, A, A>,
+                grid_b: EsriASCIIReader<R, B, B>,
+                grid_c: EsriASCIIReader<R, C, C>,
+                grid_d: EsriASCIIReader<R, D, D>,
+                grid_e: EsriASCIIReader<R, E, E>,
+                grid_f: EsriASCIIReader<R, F, F>,
             ) -> Self {
                 Self {
                     grid_a,
@@ -493,12 +493,12 @@ mod tests {
         let fd = File::open(test_path).unwrap();
         let fe = File::open(test_path).unwrap();
         let ff = File::open(test_path).unwrap();
-        let grid_i16: EsriASCIIReader<File, i16> = EsriASCIIReader::from_file(fa).unwrap();
-        let grid_i32: EsriASCIIReader<File, i32> = EsriASCIIReader::from_file(fb).unwrap();
-        let grid_i128: EsriASCIIReader<File, i128> = EsriASCIIReader::from_file(fc).unwrap();
-        let grid_i64: EsriASCIIReader<File, i64> = EsriASCIIReader::from_file(fd).unwrap();
-        let grid_f32: EsriASCIIReader<File, f32> = EsriASCIIReader::from_file(fe).unwrap();
-        let grid_f64: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(ff).unwrap();
+        let grid_i16: EsriASCIIReader<File, i16, i16> = EsriASCIIReader::from_file(fa).unwrap();
+        let grid_i32: EsriASCIIReader<File, i32, i32> = EsriASCIIReader::from_file(fb).unwrap();
+        let grid_i128: EsriASCIIReader<File, i128, i128> = EsriASCIIReader::from_file(fc).unwrap();
+        let grid_i64: EsriASCIIReader<File, i64, i64> = EsriASCIIReader::from_file(fd).unwrap();
+        let grid_f32: EsriASCIIReader<File, f32, f32> = EsriASCIIReader::from_file(fe).unwrap();
+        let grid_f64: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(ff).unwrap();
         let mut multiple_grids = MultipleGrids::new(
             grid_i16,
             grid_i32,

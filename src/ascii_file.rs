@@ -18,33 +18,50 @@ impl LineSeeker {
     }
 }
 
-pub struct EsriASCIIReader<R, T: Numerical> {
-    pub header: EsriASCIIRasterHeader<T>,
+/// A reader for ESRI ASCII raster files.
+/// This reader reads the header of the file and then reads the data on demand.
+/// The data is cached in memory, so that the file is only read once.
+/// 
+/// # Type Parameters
+/// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
+/// * `T` - The type of the coordinates. Should be a number.
+/// * `U` - The type of the height values in the grid. Should be a number
+pub struct EsriASCIIReader<R, T: Numerical, U: Numerical> {
+    pub header: EsriASCIIRasterHeader<T, U>,
     reader: BufReader<R>,
-    line_cache: Vec<Option<Vec<T>>>,
+    line_cache: Vec<Option<Vec<U>>>,
     line_start_cache: Vec<Option<u64>>,
     data_start: u64,
     line_seeker: LineSeeker,
 }
-impl<R: Read + Seek, T: Numerical> EsriASCIIReader<R, T> 
-where T: Numerical, error::Error: From<<T as Numerical>::Err>
+impl<R, T, U> EsriASCIIReader<R, T, U> 
+where 
+    R: Read + Seek,
+    T: Numerical, error::Error: From<<T as Numerical>::Err>,
+    U: Numerical, error::Error: From<<U as Numerical>::Err>
 {
     /// Create a new `EsriASCIIReader` from a file.
     ///
-    /// When creating the file, only the header is read.
+    /// When creating the file, only the header is read at first.
+    /// 
+    /// # Type Parameters
+    /// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
+    /// * `T` - The type of the coordinates. Should be a number.
+    /// * `U` - The type of the height values in the grid. Should be a number
     ///
     /// # Examples
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
-    /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
+    /// use std::fs::File;
+    /// let file = File::open("test_data/test.asc").unwrap();
+    /// let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
     /// ```
     /// # Errors
     /// Returns an error if there is something wrong with the header, such as missing values
-    /// The error should give a description of the problem.
+    /// The error should give a description of the problem..
     pub fn from_file(file: R) -> Result<Self, crate::error::Error> {
         let mut reader = BufReader::new(file);
         let grid_header = EsriASCIIRasterHeader::from_reader(&mut reader)?;
@@ -70,7 +87,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     /// use std::fs::File;
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// let file = File::open("test_data/test.asc").unwrap();
-    /// let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+    /// let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get_index(999, 0).unwrap(), 141.270_004_272_460_937_5);
     /// assert_eq!(grid.get_index(996, 3).unwrap(), 135.440_002_441_406_25);
@@ -81,7 +98,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     ///
     /// # Panics
     /// Panics if the row or column is out of bounds, which should not happen as they are checked in this function.
-    pub fn get_index(&mut self, row: usize, col: usize) -> Result<T, crate::error::Error> {
+    pub fn get_index(&mut self, row: usize, col: usize) -> Result<U, crate::error::Error> {
         if row >= self.header.nrows || col >= self.header.ncols {
             Err(crate::error::Error::OutOfBounds(row, col))?
         };
@@ -97,7 +114,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
             seek_to_line(reader, row, &mut self.line_seeker, &mut self.line_start_cache)?;
             reader.lines().next().unwrap()?
         };
-        let values: Vec<T> = line
+        let values: Vec<U> = line
             .split_whitespace()
             .map(|s| s.parse().unwrap())
             .collect();
@@ -117,8 +134,9 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     /// # Examples
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
-    /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();
+    /// use std::fs::File;
+    /// let file = File::open("test_data/test.asc").unwrap();
+    /// let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
     /// // Spot check a few values
     /// assert_eq!(grid.get(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -126,7 +144,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
-    pub fn get(&mut self, x: T, y: T) -> Option<T> {
+    pub fn get(&mut self, x: T, y: T) -> Option<U> {
         let (row, col) = self.header.index_of(x, y)?;
         let val = self.get_index(row, col).unwrap();
         Some(val)
@@ -142,8 +160,9 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     /// # Examples
     /// ```rust
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
-    /// let file = std::fs::File::open("test_data/test.asc").unwrap();
-    /// let mut grid = EsriASCIIReader::from_file(file).unwrap();;
+    /// use std::fs::File;
+    /// let file = File::open("test_data/test.asc").unwrap();
+    /// let mut grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();;
     /// // Spot check a few values
     /// assert_eq!(grid.get_interpolate(390000.0, 344000.0).unwrap(), 141.2700042724609375);
     /// assert_eq!(grid.get_interpolate(390003.0, 344003.0).unwrap(), 135.44000244140625);
@@ -151,7 +170,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     ///
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
-    pub fn get_interpolate(&mut self, x: T, y: T) -> Option<T> {
+    pub fn get_interpolate(&mut self, x: T, y: T) -> Option<U> {
         if x < self.header.min_x()
             || x > self.header.max_x()
             || y < self.header.min_y()
@@ -180,16 +199,17 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
         let lr_weight = vert_weight * (1.0 - horiz_weight);
 
         let value: f64 = ul * ul_weight + ur * ur_weight + ll * ll_weight + lr * lr_weight;
-        Some(T::from(value).unwrap())
+        Some(U::from(value).unwrap())
     }
 }
-impl<R, T> IntoIterator for EsriASCIIReader<R, T> 
+impl<R, T, U>IntoIterator for EsriASCIIReader<R, T, U> 
 where
     R: Read + Seek,
-    T: Numerical, error::Error: From<<T as Numerical>::Err>    
+    T: Numerical, error::Error: From<<T as Numerical>::Err>,
+    U: Numerical, error::Error: From<<U as Numerical>::Err>
 {
-    type Item = Result<(usize, usize, T), Error>;
-    type IntoIter = EsriASCIIRasterIntoIterator<R, T>;
+    type Item = Result<(usize, usize, U), Error>;
+    type IntoIter = EsriASCIIRasterIntoIterator<R, T, U>;
     /// Returns an iterator over the values in the raster.
     /// The iterator will scan the raster from left to right, top to bottom.
     /// So the row will start at num_rows-1 and decrease to 0.
@@ -202,7 +222,7 @@ where
     /// use esri_ascii_grid::ascii_file::EsriASCIIReader;
     /// use std::fs::File;
     /// let file = File::open("test_data/test.asc").unwrap();
-    /// let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+    /// let grid: EsriASCIIReader<File, f64, f64> = EsriASCIIReader::from_file(file).unwrap();
     /// let grid_size = grid.header.num_rows() * grid.header.num_cols();
     /// let header = grid.header;
     /// let iter = grid.into_iter();
@@ -314,20 +334,21 @@ impl<R: Read + Seek> Iterator for LineReader<R> {
     }
 }
 
-pub struct EsriASCIIRasterIntoIterator<R, T: Numerical> {
-    pub header: EsriASCIIRasterHeader<T>,
+pub struct EsriASCIIRasterIntoIterator<R, T: Numerical, U: Numerical> {
+    pub header: EsriASCIIRasterHeader<T, U>,
     line_reader: LineReader<R>,
-    row_it: Option<IntoIter<T>>,
+    row_it: Option<IntoIter<U>>,
     row: usize,
     col: usize,
     terminated: bool,
 }
-impl<R, T> Iterator for EsriASCIIRasterIntoIterator<R, T>
+impl<R, T, U> Iterator for EsriASCIIRasterIntoIterator<R, T, U>
 where 
     R: Read + Seek, 
-    T: Numerical, error::Error: From<<T as Numerical>::Err>
+    T: Numerical, error::Error: From<<T as Numerical>::Err>,
+    U: Numerical, error::Error: From<<U as Numerical>::Err>
 {
-    type Item = Result<(usize, usize, T), Error>;
+    type Item = Result<(usize, usize, U), Error>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.terminated {
             return None;
@@ -352,13 +373,13 @@ where
                 Some(Ok(line)) => {
                     match line
                         .split_whitespace()
-                        .map(|s| s.parse::<T>())
+                        .map(|s| s.parse::<U>())
                         .collect::<Result<Vec<_>, _>>()
                     {
                         Ok(row) => self.row_it = Some(row.into_iter()),
                         Err(error) => {
                             self.terminated = true;
-                            Some(Result::<(usize, usize, T), Error>::Err(error.into()));
+                            Some(Result::<(usize, usize, U), Error>::Err(error.into()));
                         }
                     }
                 }
