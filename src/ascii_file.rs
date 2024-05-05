@@ -125,10 +125,14 @@ where
             )?;
             reader.lines().next().unwrap()?
         };
-        let values: Vec<U> = line
+        let value_res = line
             .split_whitespace()
-            .map(|s| s.parse().unwrap())
-            .collect();
+            .map(|s| s.parse::<U>().map_err(|_| Error::TypeCast(
+                format!("{}, {}", row, col),
+                "grid value".to_owned(),
+                std::any::type_name::<U>(),
+            )));
+        let values: Vec<U> = value_res.collect::<Result<Vec<U>, Error>>()?;
         let ret = values[col];
         self.line_cache[row] = Some(values);
         Ok(ret)
