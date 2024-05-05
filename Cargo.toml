@@ -1,6 +1,6 @@
 [package]
 name = "esri_ascii_grid"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 authors = ["Seb Smith"]
 description = "A library for reading ESRI Ascii Grid .asc files"
@@ -9,9 +9,12 @@ readme = "readme.md"
 keywords = ["ESRI", "ASCII", "asc", "grid", "raster"]
 repository = "https://github.com/Seb105/esri-ascii-grid-rs"
 
+[profile.dev]
+# Full backtraces in debug mode
+debug = true
+
 [dependencies]
+num-traits = "0.2.19"
 replace_with = "0.1.7"
 thiserror = "1.0.59"
-
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

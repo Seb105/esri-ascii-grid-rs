@@ -1,40 +1,97 @@
+use crate::error::{self, Error};
+use num_traits::{Num, NumAssign, NumAssignOps, NumAssignRef, NumCast, NumRef};
 use std::{
+    fmt::Debug,
     io::{self, BufRead, BufReader, Read, Seek},
     str::FromStr,
 };
 
-use crate::error::Error;
-
 // use serde::{Serialize, Deserialize};
+pub trait Numerical:
+    FromStr<Err = <Self as Numerical>::Err>
+    + Num
+    + NumAssign
+    + NumAssign
+    + NumAssignOps
+    + NumAssignRef
+    + NumRef
+    + NumCast
+    + PartialOrd
+    + PartialEq
+    + Clone
+    + Copy
+    + Debug
+{
+    type Err: Debug;
+}
+impl<T> Numerical for T
+where
+    T: Num
+        + NumAssign
+        + NumAssign
+        + NumAssignOps
+        + NumAssignRef
+        + NumRef
+        + FromStr
+        + NumCast
+        + PartialOrd
+        + PartialEq
+        + Clone
+        + Copy
+        + Debug,
+    <T as FromStr>::Err: Debug,
+    error::Error: From<<T as FromStr>::Err>,
+{
+    type Err = <T as FromStr>::Err;
+}
 
+/// A reader for ESRI ASCII raster files.
+/// This reader reads the header of the file and then reads the data on demand.
+/// The data is cached in memory, so that the file is only read once.
+///
+/// # Type Parameters
+/// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
+/// * `T` - The type of the coordinates. Should be a number.
+/// * `U` - The type of the height values in the grid. Should be a number
 #[derive(Debug, Clone, Copy)]
-pub struct EsriASCIIRasterHeader {
+pub struct EsriASCIIRasterHeader<T, U>
+where
+    T: Numerical,
+    U: Numerical,
+{
     pub ncols: usize,
     pub nrows: usize,
-    pub xll: f64,
-    pub yll: f64,
-    pub yur: f64,
-    pub xur: f64,
+    pub xll: T,
+    pub yll: T,
+    pub yur: T,
+    pub xur: T,
     pub cornertype: CornerType,
-    pub cellsize: f64,
-    pub nodata_value: Option<f64>,
+    pub cellsize: T,
+    pub nodata_value: Option<U>,
 }
-impl EsriASCIIRasterHeader {
+impl<T, U> EsriASCIIRasterHeader<T, U>
+where
+    T: Numerical,
+    error::Error: From<<T as Numerical>::Err>,
+    U: Numerical,
+    error::Error: From<<U as Numerical>::Err>,
+{
     pub fn new(
         ncols: usize,
         nrows: usize,
-        mut xll: f64,
-        mut yll: f64,
+        mut xll: T,
+        mut yll: T,
         cornertype: CornerType,
-        cellsize: f64,
-        nodata_value: Option<f64>,
+        cellsize: T,
+        nodata_value: Option<U>,
     ) -> Self {
+        let two: T = T::from(2).unwrap();
         if cornertype == CornerType::Center {
-            xll -= cellsize / 2.0;
-            yll -= cellsize / 2.0;
+            xll -= cellsize / two;
+            yll -= cellsize / two;
         }
-        let xur = xll + cellsize * ncols as f64;
-        let yur = yll + cellsize * nrows as f64;
+        let xur = xll + cellsize * T::from(ncols).unwrap();
+        let yur = yll + cellsize * T::from(nrows).unwrap();
 
         Self {
             ncols,
@@ -50,12 +107,12 @@ impl EsriASCIIRasterHeader {
     }
     pub(crate) fn from_reader<R: Seek + Read>(
         reader: &mut BufReader<R>,
-    ) -> Result<EsriASCIIRasterHeader, Error> {
+    ) -> Result<EsriASCIIRasterHeader<T, U>, Error> {
         reader.rewind()?;
         let mut lines = reader.lines();
 
-        let ncols = parse_header_line(lines.next(), "ncols")?;
-        let nrows = parse_header_line(lines.next(), "nrows")?;
+        let ncols = parse_header_line::<usize>(lines.next(), "ncols")?;
+        let nrows = parse_header_line::<usize>(lines.next(), "nrows")?;
 
         let (corner_type_x, xll) = parse_ll(lines.next(), "xll")?;
         let (corner_type_y, yll) = parse_ll(lines.next(), "yll")?;
@@ -82,22 +139,22 @@ impl EsriASCIIRasterHeader {
     pub fn num_cols(&self) -> usize {
         self.ncols
     }
-    pub fn min_x(&self) -> f64 {
+    pub fn min_x(&self) -> T {
         self.xll
     }
-    pub fn max_x(&self) -> f64 {
+    pub fn max_x(&self) -> T {
         self.xur
     }
-    pub fn min_y(&self) -> f64 {
+    pub fn min_y(&self) -> T {
         self.yll
     }
-    pub fn max_y(&self) -> f64 {
+    pub fn max_y(&self) -> T {
         self.yur
     }
-    pub fn cell_size(&self) -> f64 {
+    pub fn cell_size(&self) -> T {
         self.cellsize
     }
-    pub fn no_data_value(&self) -> Option<f64> {
+    pub fn no_data_value(&self) -> Option<U> {
         self.nodata_value
     }
     /// ESRI ASCII files can have either a corner or center cell type.
@@ -109,33 +166,42 @@ impl EsriASCIIRasterHeader {
         self.cornertype
     }
     /// Get the x and y coordinates of the cell at the given row and column, or nothing if it is out of bounds.
-    pub fn index_pos(&self, row: usize, col: usize) -> Option<(f64, f64)> {
+    pub fn index_pos(&self, row: usize, col: usize) -> Option<(T, T)> {
         let nrows = self.nrows;
         let ncols = self.ncols;
         if row >= nrows || col >= ncols {
             return None;
         }
-        let x = self.min_x() + self.cell_size() * (col) as f64;
-        let y = self.min_y() + self.cell_size() * (row) as f64;
+        let x = self.min_x() + self.cell_size() * T::from(col).unwrap();
+        let y = self.max_y() - self.cell_size() * T::from(row).unwrap() - self.cell_size();
         Some((x, y))
     }
     /// Get the row and column index of the cell that contains the given x and y, or nothing if it is out of bounds.
-    pub fn index_of(&self, x: f64, y: f64) -> Option<(usize, usize)> {
+    pub fn index_of(&self, x: T, y: T) -> Option<(usize, usize)> {
         let max_x = self.max_x();
         let max_y = self.max_y();
-        if x < self.min_x() || x > max_x || y < self.min_y() || y > max_y {
+        let min_x = self.min_x();
+        let min_y = self.min_y();
+        if x < min_x || x > max_x || y < min_y || y > max_y {
             return None;
         }
-        let mut col = ((x - self.min_x()) / self.cellsize).round() as usize;
-        let mut row = ((y - self.min_y()) / self.cellsize).round() as usize;
-        // If the point is on the upper or right edge of the raster, it is considered to be in the last cell.
+        let dist_x = x - min_x;
+        let dist_y = y - min_y;
+        let mut index_x = dist_x / self.cell_size();
+        let mut index_y = dist_y / self.cell_size();
+        let one: T = T::from(1).unwrap();
         if x == max_x {
-            col -= 1;
+            index_x -= one;
         }
         if y == max_y {
-            row -= 1;
+            index_y -= one;
         }
-        Some((col, row))
+        let col: usize = NumCast::from(index_x).unwrap();
+        // Doing it this way means bottom left of cell is always the reference point, whereas self.max_y() - y would mean top left of cell is reference point
+        let row: usize = self.nrows - <usize as NumCast>::from(index_y).unwrap() - 1;
+        // Allow getting the extremes of the raster
+
+        Some((row, col))
     }
 }
 
@@ -170,29 +236,37 @@ where
     if field.to_lowercase() != expected {
         Err(Error::MismatchedField(expected.into(), field.into()))?
     }
-    let value = tokens_it
+    let val_str = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingValue(expected.into()))?
-        .parse()?;
-    Ok(value)
+        .ok_or_else(|| Error::MissingValue(expected.into()))?;
+    let value: Result<T, _> = val_str
+        .parse()
+        .map_err(|_| Error::TypeCast(val_str.into(), field.into(), std::any::type_name::<T>()));
+    value
 }
 
-fn parse_ll(
+fn parse_ll<T>(
     line: Option<Result<String, io::Error>>,
     expected_prefix: &str,
-) -> Result<(CornerType, f64), Error> {
-    let expected = format!("{expected_prefix}corner or {expected_prefix}center");
-    let line = line.ok_or_else(|| Error::MissingField(expected.to_owned()))??;
+) -> Result<(CornerType, T), Error>
+where
+    T: FromStr,
+    Error: From<<T as FromStr>::Err>,
+{
+    let expected_prefix = format!("{expected_prefix}corner or {expected_prefix}center");
+    let line = line.ok_or_else(|| Error::MissingField(expected_prefix.to_owned()))??;
     let mut tokens_it = line.split_whitespace();
 
     let field = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingField(expected.to_owned()))?;
+        .ok_or_else(|| Error::MissingField(expected_prefix.to_owned()))?;
     let corner_type = CornerType::from_str(field)?;
 
-    let value = tokens_it
+    let value_str = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingValue(expected.to_owned()))?
-        .parse()?;
+        .ok_or_else(|| Error::MissingValue(expected_prefix.to_owned()))?;
+    let value = value_str
+        .parse()
+        .map_err(|_| Error::TypeCast(value_str.into(), field.into(), std::any::type_name::<T>()))?;
     Ok((corner_type, value))
 }
