@@ -1,19 +1,46 @@
 use crate::error::{self, Error};
-use num_traits::{
-    Num, NumAssign, NumAssignOps, NumAssignRef,
-    NumCast, NumRef,
-};
+use num_traits::{Num, NumAssign, NumAssignOps, NumAssignRef, NumCast, NumRef};
 use std::{
-    fmt::Debug, io::{self, BufRead, BufReader, Read, Seek}, str::FromStr
+    fmt::Debug,
+    io::{self, BufRead, BufReader, Read, Seek},
+    str::FromStr,
 };
 
 // use serde::{Serialize, Deserialize};
-pub trait Numerical: FromStr<Err = <Self as Numerical>::Err> + Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + NumCast + PartialOrd + PartialEq + Clone + Copy + Debug {
+pub trait Numerical:
+    FromStr<Err = <Self as Numerical>::Err>
+    + Num
+    + NumAssign
+    + NumAssign
+    + NumAssignOps
+    + NumAssignRef
+    + NumRef
+    + NumCast
+    + PartialOrd
+    + PartialEq
+    + Clone
+    + Copy
+    + Debug
+{
     type Err: Debug;
 }
-impl<T>Numerical for T 
-where T: Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + FromStr + NumCast + PartialOrd + PartialEq + Clone + Copy + Debug,
-<T as FromStr>::Err: Debug,  error::Error: From<<T as FromStr>::Err>
+impl<T> Numerical for T
+where
+    T: Num
+        + NumAssign
+        + NumAssign
+        + NumAssignOps
+        + NumAssignRef
+        + NumRef
+        + FromStr
+        + NumCast
+        + PartialOrd
+        + PartialEq
+        + Clone
+        + Copy
+        + Debug,
+    <T as FromStr>::Err: Debug,
+    error::Error: From<<T as FromStr>::Err>,
 {
     type Err = <T as FromStr>::Err;
 }
@@ -21,16 +48,16 @@ where T: Num + NumAssign + NumAssign + NumAssignOps + NumAssignRef + NumRef + Fr
 /// A reader for ESRI ASCII raster files.
 /// This reader reads the header of the file and then reads the data on demand.
 /// The data is cached in memory, so that the file is only read once.
-/// 
+///
 /// # Type Parameters
 /// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
 /// * `T` - The type of the coordinates. Should be a number.
 /// * `U` - The type of the height values in the grid. Should be a number
 #[derive(Debug, Clone, Copy)]
-pub struct EsriASCIIRasterHeader<T, U> 
+pub struct EsriASCIIRasterHeader<T, U>
 where
     T: Numerical,
-    U: Numerical
+    U: Numerical,
 {
     pub ncols: usize,
     pub nrows: usize,
@@ -42,10 +69,12 @@ where
     pub cellsize: T,
     pub nodata_value: Option<U>,
 }
-impl<T, U> EsriASCIIRasterHeader<T, U> 
-where 
-    T: Numerical, error::Error: From<<T as Numerical>::Err>,
-    U: Numerical, error::Error: From<<U as Numerical>::Err>
+impl<T, U> EsriASCIIRasterHeader<T, U>
+where
+    T: Numerical,
+    error::Error: From<<T as Numerical>::Err>,
+    U: Numerical,
+    error::Error: From<<U as Numerical>::Err>,
 {
     pub fn new(
         ncols: usize,
@@ -210,7 +239,7 @@ where
     let val_str = tokens_it
         .next()
         .ok_or_else(|| Error::MissingValue(expected.into()))?;
-    let value:Result<T, _> = val_str
+    let value: Result<T, _> = val_str
         .parse()
         .map_err(|_| Error::TypeCast(val_str.into(), field.into(), std::any::type_name::<T>()));
     value

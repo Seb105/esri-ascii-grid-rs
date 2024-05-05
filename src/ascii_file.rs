@@ -1,11 +1,15 @@
 use std::{
-    io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom}, vec::IntoIter
+    io::{self, BufRead, BufReader, Lines, Read, Seek, SeekFrom},
+    vec::IntoIter,
 };
 
 use num_traits::NumCast;
 use replace_with::replace_with_or_abort;
 
-use crate::{error::{self, Error}, header::{EsriASCIIRasterHeader, Numerical}};
+use crate::{
+    error::{self, Error},
+    header::{EsriASCIIRasterHeader, Numerical},
+};
 
 struct LineSeeker {
     line: usize,
@@ -21,7 +25,7 @@ impl LineSeeker {
 /// A reader for ESRI ASCII raster files.
 /// This reader reads the header of the file and then reads the data on demand.
 /// The data is cached in memory, so that the file is only read once.
-/// 
+///
 /// # Type Parameters
 /// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
 /// * `T` - The type of the coordinates. Should be a number.
@@ -34,16 +38,18 @@ pub struct EsriASCIIReader<R, T: Numerical, U: Numerical> {
     data_start: u64,
     line_seeker: LineSeeker,
 }
-impl<R, T, U> EsriASCIIReader<R, T, U> 
-where 
+impl<R, T, U> EsriASCIIReader<R, T, U>
+where
     R: Read + Seek,
-    T: Numerical, error::Error: From<<T as Numerical>::Err>,
-    U: Numerical, error::Error: From<<U as Numerical>::Err>
+    T: Numerical,
+    error::Error: From<<T as Numerical>::Err>,
+    U: Numerical,
+    error::Error: From<<U as Numerical>::Err>,
 {
     /// Create a new `EsriASCIIReader` from a file.
     ///
     /// When creating the file, only the header is read at first.
-    /// 
+    ///
     /// # Type Parameters
     /// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
     /// * `T` - The type of the coordinates. Should be a number.
@@ -111,7 +117,12 @@ where
             reader.seek(SeekFrom::Start(line_pos))?;
             reader.lines().next().unwrap()?
         } else {
-            seek_to_line(reader, row, &mut self.line_seeker, &mut self.line_start_cache)?;
+            seek_to_line(
+                reader,
+                row,
+                &mut self.line_seeker,
+                &mut self.line_start_cache,
+            )?;
             reader.lines().next().unwrap()?
         };
         let values: Vec<U> = line
@@ -184,10 +195,10 @@ where
 
         let (ll_x, ll_y) = self.header.index_pos(ll_row, ll_col).unwrap();
 
-        let ll= <f64 as NumCast>::from(self.get_index(ll_row, ll_col).unwrap()).unwrap();
-        let lr= <f64 as NumCast>::from(self.get_index(ll_row, ll_col + 1).unwrap()).unwrap();
-        let ul= <f64 as NumCast>::from(self.get_index(ll_row - 1, ll_col).unwrap()).unwrap();
-        let ur= <f64 as NumCast>::from(self.get_index(ll_row - 1, ll_col + 1).unwrap()).unwrap();
+        let ll = <f64 as NumCast>::from(self.get_index(ll_row, ll_col).unwrap()).unwrap();
+        let lr = <f64 as NumCast>::from(self.get_index(ll_row, ll_col + 1).unwrap()).unwrap();
+        let ul = <f64 as NumCast>::from(self.get_index(ll_row - 1, ll_col).unwrap()).unwrap();
+        let ur = <f64 as NumCast>::from(self.get_index(ll_row - 1, ll_col + 1).unwrap()).unwrap();
 
         let cell_size = <f64 as NumCast>::from(self.header.cell_size()).unwrap();
         let vert_weight = <f64 as NumCast>::from(x - ll_x).unwrap() / cell_size;
@@ -202,11 +213,13 @@ where
         Some(U::from(value).unwrap())
     }
 }
-impl<R, T, U>IntoIterator for EsriASCIIReader<R, T, U> 
+impl<R, T, U> IntoIterator for EsriASCIIReader<R, T, U>
 where
     R: Read + Seek,
-    T: Numerical, error::Error: From<<T as Numerical>::Err>,
-    U: Numerical, error::Error: From<<U as Numerical>::Err>
+    T: Numerical,
+    error::Error: From<<T as Numerical>::Err>,
+    U: Numerical,
+    error::Error: From<<U as Numerical>::Err>,
 {
     type Item = Result<(usize, usize, U), Error>;
     type IntoIter = EsriASCIIRasterIntoIterator<R, T, U>;
@@ -264,7 +277,12 @@ where
         }
     }
 }
-fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_seeker: &mut LineSeeker, line_start_cache: &mut Vec<Option<u64>>) -> Result<(), Error> {
+fn seek_to_line<R: Read + Seek>(
+    reader: &mut BufReader<R>,
+    row: usize,
+    line_seeker: &mut LineSeeker,
+    line_start_cache: &mut Vec<Option<u64>>,
+) -> Result<(), Error> {
     let latest_line = line_seeker.line;
     let latest_pos = line_seeker.position;
     reader.seek(SeekFrom::Start(latest_pos))?;
@@ -278,7 +296,6 @@ fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_see
     line_seeker.update(row, reader.stream_position()?);
     Ok(())
 }
-
 
 enum LineReader<R> {
     Uninitialized {
@@ -343,10 +360,12 @@ pub struct EsriASCIIRasterIntoIterator<R, T: Numerical, U: Numerical> {
     terminated: bool,
 }
 impl<R, T, U> Iterator for EsriASCIIRasterIntoIterator<R, T, U>
-where 
-    R: Read + Seek, 
-    T: Numerical, error::Error: From<<T as Numerical>::Err>,
-    U: Numerical, error::Error: From<<U as Numerical>::Err>
+where
+    R: Read + Seek,
+    T: Numerical,
+    error::Error: From<<T as Numerical>::Err>,
+    U: Numerical,
+    error::Error: From<<U as Numerical>::Err>,
 {
     type Item = Result<(usize, usize, U), Error>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -403,10 +422,6 @@ where
         };
         self.col += 1;
 
-        Some(Ok((
-            current_row,
-            current_col,
-            value,
-        )))
+        Some(Ok((current_row, current_col, value)))
     }
 }
