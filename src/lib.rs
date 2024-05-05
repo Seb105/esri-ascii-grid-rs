@@ -49,13 +49,13 @@
 //!         panic!("your error handler")
 //!     };
 //!     num_elements += 1;
-//!     if row == 3 && col == 3 {
+//!     if row == 996 && col == 3 {
 //!         let (x, y) = header.index_pos(col, row).unwrap();
 //!         assert_eq!(x, 390003.0);
 //!         assert_eq!(y, 344003.0);
 //!         assert_eq!(value, 135.44000244140625);
 //!     }
-//!     if row == 0 && col == 0 {
+//!     if row == header.nrows-1 && col == 0 {
 //!         let (x, y) = header.index_pos(col, row).unwrap();
 //!         assert_eq!(x, 390000.0);
 //!         assert_eq!(y, 344000.0);
@@ -109,11 +109,11 @@ mod tests {
         let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         // Spot check a few values
         assert_eq!(
-            grid.get_index(994, 7).unwrap(),
+            grid.get_index(6, 7).unwrap(),
             grid.header.no_data_value().unwrap()
         );
-        assert_eq!(grid.get_index(3, 3).unwrap(), 135.440_002_441_406_25);
-        assert_eq!(grid.get_index(0, 0).unwrap(), 141.270_004_272_460_937_5);
+        assert_eq!(grid.get_index(996, 3).unwrap(), 135.440_002_441_406_25);
+        assert_eq!(grid.get_index(999, 0).unwrap(), 141.270_004_272_460_937_5);
 
         // Check the bounds
         assert!(grid.get_index(0, 0).is_ok());
@@ -171,14 +171,14 @@ mod tests {
         for cell in iter {
             let (row, col, value) = cell.unwrap();
             num_elements += 1;
-            if row == 3 && col == 3 {
-                let (x, y) = header.index_pos(col, row).unwrap();
+            if row == 996 && col == 3 {
+                let (x, y) = header.index_pos(row, col).unwrap();
                 assert_eq!(x, 390_003.0);
                 assert_eq!(y, 344_003.0);
                 assert_eq!(value, 135.440_002_441_406_25);
             }
-            if row == 0 && col == 0 {
-                let (x, y) = header.index_pos(col, row).unwrap();
+            if row == header.nrows-1 && col == 0 {
+                let (x, y) = header.index_pos(row, col).unwrap();
                 assert_eq!(x, 390_000.0);
                 assert_eq!(y, 344_000.0);
                 assert_eq!(value, 141.270_004_272_460_937_5);
@@ -186,7 +186,33 @@ mod tests {
         }
         assert_eq!(grid_size, num_elements);
     }
-
+    #[test]
+    fn test_index_pos() {
+        let file = File::open("test_data/test.asc").unwrap();
+        let grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
+        let cell_size = grid.header.cell_size();
+        // - cell_size because max_x/y is the top right corner of the cell, but the index_pos is the bottom left corner
+        let max_index_x = grid.header.max_x() - cell_size;
+        let max_index_y = grid.header.max_y() - cell_size;
+        let min_index_x = grid.header.min_x();
+        let min_index_y = grid.header.min_y();
+        assert_eq!(
+            grid.header.index_pos(0, 0).unwrap(),
+            (min_index_x, max_index_y)
+        );
+        assert_eq!(
+            grid.header.index_pos(grid.header.num_rows() - 1, grid.header.num_cols() - 1).unwrap(),
+            (max_index_x, min_index_y)
+        );
+        assert_eq!(
+            grid.header.index_pos(grid.header.num_rows() - 1, 0).unwrap(),
+            (min_index_x, min_index_y)
+        );
+        assert_eq!(
+            grid.header.index_pos(0, grid.header.num_cols() - 1).unwrap(),
+            (max_index_x, max_index_y)
+        );
+    }
     #[test]
     fn test_index_of() {
         let file = File::open("test_data/test.asc").unwrap();
@@ -195,25 +221,25 @@ mod tests {
             grid.header
                 .index_of(grid.header.min_x(), grid.header.min_y())
                 .unwrap(),
-            (0, 0)
+            (grid.header.num_rows() - 1, 0)
         );
         assert_eq!(
             grid.header
                 .index_of(grid.header.max_x(), grid.header.max_y())
                 .unwrap(),
-            (grid.header.num_cols() - 1, grid.header.num_rows() - 1)
+            (0, grid.header.num_cols() - 1)
         );
         assert_eq!(
             grid.header
                 .index_of(grid.header.min_x(), grid.header.max_y())
                 .unwrap(),
-            (0, grid.header.num_rows() - 1)
+            (0, 0)
         );
         assert_eq!(
             grid.header
                 .index_of(grid.header.max_x(), grid.header.min_y())
                 .unwrap(),
-            (grid.header.num_cols() - 1, 0)
+            (grid.header.num_rows() - 1, grid.header.num_cols() - 1)
         );
     }
 
@@ -221,10 +247,10 @@ mod tests {
     fn test_get_interp() {
         let file = File::open("test_data/test.asc").unwrap();
         let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
-        let ll = grid.get_index(0, 0).unwrap();
-        let lr = grid.get_index(0, 1).unwrap();
-        let ul = grid.get_index(1, 0).unwrap();
-        let ur = grid.get_index(1, 1).unwrap();
+        let ll = grid.get_index(999, 0).unwrap();
+        let lr = grid.get_index(999, 1).unwrap();
+        let ul = grid.get_index(998, 0).unwrap();
+        let ur = grid.get_index(998, 1).unwrap();
 
         // Spot check a few values
         let expected1 = (ll + lr + ul + ur) / 4.;
@@ -264,20 +290,19 @@ mod tests {
         let cell_size = grid.header.cell_size();
         assert_eq!(
             grid.get_interpolate(min_x, min_y).unwrap(),
-            grid.get_index(0, 0).unwrap()
+            grid.get_index(grid.header.num_rows() - 1, 0).unwrap()
         );
         assert_eq!(
             grid.get_interpolate(max_x, max_y).unwrap(),
-            grid.get_index(grid.header.num_rows() - 1, grid.header.num_cols() - 1)
-                .unwrap()
-        );
-        assert_eq!(
-            grid.get_interpolate(min_x, max_y).unwrap(),
             grid.get_index(0, grid.header.num_cols() - 1).unwrap()
         );
         assert_eq!(
+            grid.get_interpolate(min_x, max_y).unwrap(),
+            grid.get_index(0, 0).unwrap()
+        );
+        assert_eq!(
             grid.get_interpolate(max_x, min_y).unwrap(),
-            grid.get_index(grid.header.num_rows() - 1, 0).unwrap()
+            grid.get_index(grid.header.num_rows() - 1, grid.header.num_cols() - 1).unwrap()
         );
         assert!(grid.get_interpolate(min_x - cell_size, min_y).is_none());
         assert!(grid.get_interpolate(min_x, min_y - cell_size).is_none());
@@ -290,21 +315,23 @@ mod tests {
         let file = File::open("test_data/test.asc").unwrap();
         let mut grid: EsriASCIIReader<File, f64> = EsriASCIIReader::from_file(file).unwrap();
         let header = grid.header;
-        for row in 0..grid.header.ncols {
-            for col in 0..grid.header.nrows {
-                let x_pos = row as f64 * grid.header.cell_size() + grid.header.min_x();
-                let y_pos = col as f64 * grid.header.cell_size() + grid.header.min_y();
+        for row in 0..grid.header.nrows {
+            for col in 0..grid.header.ncols {
+                let x_pos = grid.header.min_x() + col as f64 * grid.header.cell_size();
+                let y_pos = grid.header.max_y() - row as f64 * grid.header.cell_size() - grid.header.cell_size();
+                let index_of = grid.header.index_of(x_pos, y_pos).unwrap();
+                assert_eq!(index_of, (row, col));
                 let val = grid.get(x_pos, y_pos).unwrap();
-                let val2 = grid.get_index(col, row).unwrap();
+                let val2 = grid.get_index(row, col).unwrap();
                 assert_eq!(val, val2);
-                if row == 3 && col == 3 {
-                    let (x, y) = header.index_pos(col, row).unwrap();
+                if row == 996 && col == 3 {
+                    let (x, y) = header.index_pos(row, col).unwrap();
                     assert_eq!(x, 390_003.0);
                     assert_eq!(y, 344_003.0);
                     assert_eq!(val, 135.440_002_441_406_25);
                 }
-                if row == 0 && col == 0 {
-                    let (x, y) = header.index_pos(col, row).unwrap();
+                if row == header.nrows-1 && col == 0 {
+                    let (x, y) = header.index_pos(row, col).unwrap();
                     assert_eq!(x, 390_000.0);
                     assert_eq!(y, 344_000.0);
                     assert_eq!(val, 141.270_004_272_460_937_5);

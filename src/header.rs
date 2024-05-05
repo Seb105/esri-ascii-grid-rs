@@ -131,26 +131,35 @@ impl<T: Numerical> EsriASCIIRasterHeader<T> where error::Error: From<<T as Numer
             return None;
         }
         let x = self.min_x() + self.cell_size() * T::from(col).unwrap();
-        let y = self.min_y() + self.cell_size() * T::from(row).unwrap();
+        let y = self.max_y() - self.cell_size() * T::from(row).unwrap() - self.cell_size();
         Some((x, y))
     }
     /// Get the row and column index of the cell that contains the given x and y, or nothing if it is out of bounds.
     pub fn index_of(&self, x: T, y: T) -> Option<(usize, usize)> {
         let max_x = self.max_x();
         let max_y = self.max_y();
-        if x < self.min_x() || x > max_x || y < self.min_y() || y > max_y {
+        let min_x = self.min_x();
+        let min_y = self.min_y();
+        if x < min_x || x > max_x || y < min_y || y > max_y {
             return None;
         }
-        let mut col: usize = <usize as NumCast>::from((x - self.min_x()) / self.cellsize).unwrap();
-        let mut row: usize = <usize as NumCast>::from((y - self.min_y()) / self.cellsize).unwrap();
-        // If the point is on the upper or right edge of the raster, it is considered to be in the last cell.
+        let dist_x = x - min_x;
+        let dist_y = y - min_y;
+        let mut index_x = dist_x / self.cell_size();
+        let mut index_y = dist_y / self.cell_size();
+        let one: T = T::from(1).unwrap();
         if x == max_x {
-            col -= 1;
+            index_x -= one;
         }
         if y == max_y {
-            row -= 1;
+            index_y -= one;
         }
-        Some((col, row))
+        let col: usize = NumCast::from(index_x).unwrap();
+        // Doing it this way means bottom left of cell is always the reference point, whereas self.max_y() - y would mean top left of cell is reference point
+        let row: usize = self.nrows - <usize as NumCast>::from(index_y).unwrap() - 1;
+        // Allow getting the extremes of the raster
+
+        Some((row, col))
     }
 }
 

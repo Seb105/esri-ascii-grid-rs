@@ -50,7 +50,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
         let grid_header = EsriASCIIRasterHeader::from_reader(&mut reader)?;
         let data_start = reader.stream_position()?;
         let mut line_start_cache = vec![None; grid_header.num_rows()];
-        line_start_cache[grid_header.num_rows() - 1] = Some(data_start);
+        line_start_cache[0] = Some(data_start);
         Ok(Self {
             header: grid_header,
             reader,
@@ -58,13 +58,13 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
             line_start_cache: line_start_cache,
             data_start,
             line_seeker: LineSeeker {
-                line: grid_header.num_rows() - 1,
+                line: 0,
                 position: data_start,
             },
         })
     }
     /// Returns the value at the given row and column.
-    /// 0, 0 is the bottom left corner. The row and column are zero indexed.
+    /// 0, 0 is the top left corner. The row and column are zero indexed.
     /// # Examples
     /// ```rust
     /// use std::fs::File;
@@ -127,7 +127,7 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
     /// # Panics
     /// Panics if the coordinates are outside the bounds of the raster, which should not happen as they are checked in this function.
     pub fn get(&mut self, x: T, y: T) -> Option<T> {
-        let (col, row) = self.header.index_of(x, y)?;
+        let (row, col) = self.header.index_of(x, y)?;
         let val = self.get_index(row, col).unwrap();
         Some(val)
     }
@@ -159,17 +159,16 @@ where T: Numerical, error::Error: From<<T as Numerical>::Err>
         {
             return None;
         }
-        let ll_col =  <usize as NumCast>::from((x - self.header.min_x()) / self.header.cellsize).unwrap()
-            .min(self.header.ncols - 2);
-        let ll_row =  <usize as NumCast>::from((y - self.header.min_y()) / self.header.cellsize).unwrap()
-            .min(self.header.nrows - 2);
+        let (mut ll_row, mut ll_col) = self.header.index_of(x, y).unwrap();
+        ll_col = ll_col.min(self.header.num_cols() - 2);
+        ll_row = ll_row.max(1);
 
         let (ll_x, ll_y) = self.header.index_pos(ll_row, ll_col).unwrap();
 
         let ll= <f64 as NumCast>::from(self.get_index(ll_row, ll_col).unwrap()).unwrap();
         let lr= <f64 as NumCast>::from(self.get_index(ll_row, ll_col + 1).unwrap()).unwrap();
-        let ul= <f64 as NumCast>::from(self.get_index(ll_row + 1, ll_col).unwrap()).unwrap();
-        let ur= <f64 as NumCast>::from(self.get_index(ll_row + 1, ll_col + 1).unwrap()).unwrap();
+        let ul= <f64 as NumCast>::from(self.get_index(ll_row - 1, ll_col).unwrap()).unwrap();
+        let ur= <f64 as NumCast>::from(self.get_index(ll_row - 1, ll_col + 1).unwrap()).unwrap();
 
         let cell_size = <f64 as NumCast>::from(self.header.cell_size()).unwrap();
         let vert_weight = <f64 as NumCast>::from(x - ll_x).unwrap() / cell_size;
@@ -213,13 +212,13 @@ where
     ///         panic!("your error handler")
     ///     };
     ///     num_elements += 1;
-    ///     if row == 3 && col == 3 {
+    ///     if row == 996 && col == 3 {
     ///         let (x, y) = header.index_pos(col, row).unwrap();
     ///         assert_eq!(x, 390003.0);
     ///         assert_eq!(y, 344003.0);
     ///         assert_eq!(value, 135.44000244140625);
     ///     }
-    ///     if row == 0 && col == 0 {
+    ///     if row == header.nrows-1 && col == 0 {
     ///         let (x, y) = header.index_pos(col, row).unwrap();
     ///         assert_eq!(x, 390000.0);
     ///         assert_eq!(y, 344000.0);
@@ -249,13 +248,12 @@ fn seek_to_line<R: Read + Seek> (reader: &mut BufReader<R>, row: usize, line_see
     let latest_line = line_seeker.line;
     let latest_pos = line_seeker.position;
     reader.seek(SeekFrom::Start(latest_pos))?;
-    for i in (row..latest_line).rev() {
+    for i in latest_line..row {
+        line_start_cache[i] = Some(reader.stream_position()?);
         reader
             .lines()
             .next()
             .ok_or_else(|| Error::MismatchedRowCount(row, i))??;
-        line_start_cache[i] = Some(reader.stream_position()?);
-
     }
     line_seeker.update(row, reader.stream_position()?);
     Ok(())
@@ -385,7 +383,7 @@ where
         self.col += 1;
 
         Some(Ok((
-            self.header.nrows - 1 - current_row,
+            current_row,
             current_col,
             value,
         )))

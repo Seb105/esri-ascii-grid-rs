@@ -52,13 +52,13 @@ for cell in iter {
         panic!("your error handler")
     };
     num_elements += 1;
-    if row == 3 && col == 3 {
+    if row == 996 && col == 3 {
         let (x, y) = header.index_pos(col, row).unwrap();
         assert_eq!(x, 390003.0);
         assert_eq!(y, 344003.0);
         assert_eq!(value, 135.44000244140625);
     }
-    if row == 0 && col == 0 {
+    if row == header.nrows-1 && col == 0 {
         let (x, y) = header.index_pos(col, row).unwrap();
         assert_eq!(x, 390000.0);
         assert_eq!(y, 344000.0);
