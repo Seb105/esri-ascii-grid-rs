@@ -229,8 +229,8 @@ where
     type IntoIter = EsriASCIIRasterIntoIterator<R, T, U>;
     /// Returns an iterator over the values in the raster.
     /// The iterator will scan the raster from left to right, top to bottom.
-    /// So the row will start at num_rows-1 and decrease to 0.
-    /// The column will start at 0 and increase to num_cols-1.
+    /// Row 0 is the top row
+    /// Column 0 is the leftmost column
     ///
     /// If an error is encountered at any point, the iterator will return an
     /// `Err` once and halt.
