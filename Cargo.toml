@@ -1,6 +1,6 @@
 [package]
 name = "esri_ascii_grid"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2021"
 authors = ["Seb Smith"]
 description = "A library for reading ESRI Ascii Grid .asc files"
@@ -17,7 +17,7 @@ debug = true
 num-traits = "0.2.19"
 ordered-float = { version = "4.2.2", optional = true }
 replace_with = "0.1.7"
-thiserror = "1.0.59"
+thiserror = "1.0.63"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
