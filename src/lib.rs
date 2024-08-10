@@ -548,4 +548,14 @@ mod tests {
         // Check that we can get all the values
         multiple_grids.compare_to(100., 150., 35.);
     }
+
+    #[cfg(feature = "ordered-float")]
+    #[test]
+    fn can_parse_into_notnan() {
+        use ordered_float::NotNan;
+
+        let file = File::open("test_data/test.asc").unwrap();
+        let grid = EsriASCIIReader::<_, NotNan<f64>, NotNan<f64>>::from_file(file).unwrap();
+        assert!(grid.into_iter().all(|cell| cell.is_ok()));
+    }
 }
