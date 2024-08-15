@@ -11,6 +11,7 @@ use crate::{
     header::{EsriASCIIRasterHeader, Numerical},
 };
 
+#[derive(Debug)]
 struct LineSeeker {
     line: usize,
     position: u64,
@@ -30,6 +31,7 @@ impl LineSeeker {
 /// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
 /// * `T` - The type of the coordinates. Should be a number.
 /// * `U` - The type of the height values in the grid. Should be a number
+#[derive(Debug)]
 pub struct EsriASCIIReader<R, T: Numerical, U: Numerical> {
     pub header: EsriASCIIRasterHeader<T, U>,
     reader: BufReader<R>,
@@ -301,6 +303,7 @@ fn seek_to_line<R: Read + Seek>(
     Ok(())
 }
 
+#[derive(Debug)]
 enum LineReader<R> {
     Uninitialized {
         data_start: u64,
@@ -355,6 +358,7 @@ impl<R: Read + Seek> Iterator for LineReader<R> {
     }
 }
 
+#[derive(Debug)]
 pub struct EsriASCIIRasterIntoIterator<R, T: Numerical, U: Numerical> {
     pub header: EsriASCIIRasterHeader<T, U>,
     line_reader: LineReader<R>,

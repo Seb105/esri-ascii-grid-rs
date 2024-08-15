@@ -53,7 +53,7 @@ where
 /// * `R` - The type of the file. This should be a file that implements `Read` and `Seek`.
 /// * `T` - The type of the coordinates. Should be a number.
 /// * `U` - The type of the height values in the grid. Should be a number
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EsriASCIIRasterHeader<T, U>
 where
     T: Numerical,
