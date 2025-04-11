@@ -440,9 +440,10 @@ mod tests {
             .get(header_corner.max_x(), header_corner.min_y())
             .unwrap();
     }
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_generics() {
-        // std::env::set_var("RUST_BACKTRACE", "full");
+        #[allow(clippy::struct_field_names)]
         struct MultipleGrids<R, A, B, C, D, E, F>
         where
             R: Read + Seek,
@@ -493,6 +494,7 @@ mod tests {
                     grid_f,
                 }
             }
+            #[allow(clippy::many_single_char_names)]
             fn get_all(&mut self, x: f64, y: f64) -> (A, B, C, D, E, F) {
                 let a = self
                     .grid_a
@@ -518,8 +520,9 @@ mod tests {
                     .grid_f
                     .get(F::from(x).unwrap(), F::from(y).unwrap())
                     .unwrap();
-                return (a, b, c, d, e, f);
+                (a, b, c, d, e, f)
             }
+            #[allow(clippy::many_single_char_names)]
             fn compare_to(&mut self, x: f64, y: f64, value: f64) {
                 let (a, b, c, d, e, f) = self.get_all(x, y);
                 assert_eq!(a, A::from(value).unwrap());

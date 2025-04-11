@@ -80,7 +80,7 @@ where
             header: grid_header,
             reader,
             line_cache: vec![None; grid_header.num_rows()],
-            line_start_cache: line_start_cache,
+            line_start_cache,
             data_start,
             line_seeker: LineSeeker {
                 line: 0,
@@ -108,8 +108,8 @@ where
     /// Panics if the row or column is out of bounds, which should not happen as they are checked in this function.
     pub fn get_index(&mut self, row: usize, col: usize) -> Result<U, crate::error::Error> {
         if row >= self.header.nrows || col >= self.header.ncols {
-            Err(crate::error::Error::OutOfBounds(row, col))?
-        };
+            Err(crate::error::Error::OutOfBounds(row, col))?;
+        }
         if let Some(values) = &self.line_cache[row] {
             let val = values[col];
             return Ok(val);
@@ -130,7 +130,7 @@ where
         let value_res = line
             .split_whitespace()
             .map(|s| s.parse::<U>().map_err(|_| Error::TypeCast(
-                format!("{}, {}", row, col),
+                format!("{row}, {col}"),
                 "grid value".to_owned(),
                 std::any::type_name::<U>(),
             )));
@@ -287,17 +287,17 @@ fn seek_to_line<R: Read + Seek>(
     reader: &mut BufReader<R>,
     row: usize,
     line_seeker: &mut LineSeeker,
-    line_start_cache: &mut Vec<Option<u64>>,
+    line_start_cache: &mut [Option<u64>],
 ) -> Result<(), Error> {
     let latest_line = line_seeker.line;
     let latest_pos = line_seeker.position;
     reader.seek(SeekFrom::Start(latest_pos))?;
-    for i in latest_line..row {
-        line_start_cache[i] = Some(reader.stream_position()?);
+    for (cache, line) in line_start_cache[latest_line..row].iter_mut().zip(latest_line..) {
+        *cache = Some(reader.stream_position()?);
         reader
             .lines()
             .next()
-            .ok_or_else(|| Error::MismatchedRowCount(row, i))??;
+            .ok_or(Error::MismatchedRowCount(row, line))??;
     }
     line_seeker.update(row, reader.stream_position()?);
     Ok(())
@@ -351,7 +351,7 @@ impl<R: Read + Seek> Iterator for LineReader<R> {
             Self::Uninitialized { .. } => unreachable!(),
             Self::Invalid { .. } => {
                 // error has been returned for the previous iteration, so we halt here
-                return None;
+                None
             }
             Self::Initialized { lines } => lines.next(),
         }
@@ -400,13 +400,13 @@ where
                 Some(Ok(line)) => {
                     match line
                         .split_whitespace()
-                        .map(|s| s.parse::<U>())
+                        .map(str::parse)
                         .collect::<Result<Vec<_>, _>>()
                     {
                         Ok(row) => self.row_it = Some(row.into_iter()),
                         Err(error) => {
                             self.terminated = true;
-                            Some(Result::<(usize, usize, U), Error>::Err(error.into()));
+                            let _ = Result::<(usize, usize, U), Error>::Err(error.into());
                         }
                     }
                 }

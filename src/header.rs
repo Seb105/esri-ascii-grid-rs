@@ -76,6 +76,10 @@ where
     U: Numerical,
     error::Error: From<<U as Numerical>::Err>,
 {
+    /// Creates a new `EsriASCIIRasterHeader` instance.
+    ///
+    /// # Panics
+    /// Panics if type T does not support `T::from(i32)`
     pub fn new(
         ncols: usize,
         nrows: usize,
@@ -117,7 +121,7 @@ where
         let (corner_type_x, xll) = parse_ll(lines.next(), "xll")?;
         let (corner_type_y, yll) = parse_ll(lines.next(), "yll")?;
         if corner_type_x != corner_type_y {
-            Err(Error::BrokenInvariant("corner type disagree".into()))?
+            Err(Error::BrokenInvariant("corner type disagree".into()))?;
         }
 
         let cellsize = parse_header_line(lines.next(), "cellsize")?;
@@ -166,6 +170,9 @@ where
         self.cornertype
     }
     /// Get the x and y coordinates of the cell at the given row and column, or nothing if it is out of bounds.
+    ///
+    /// # Panics
+    /// Panics if `T::from` fails to convert the column or row index into the type `T`.
     pub fn index_pos(&self, row: usize, col: usize) -> Option<(T, T)> {
         let nrows = self.nrows;
         let ncols = self.ncols;
@@ -177,6 +184,9 @@ where
         Some((x, y))
     }
     /// Get the row and column index of the cell that contains the given x and y, or nothing if it is out of bounds.
+    /// 
+    /// # Panics
+    /// Panics if type T does not support `usize::from(T)`
     pub fn index_of(&self, x: T, y: T) -> Option<(usize, usize)> {
         let max_x = self.max_x();
         let max_y = self.max_y();
@@ -234,7 +244,7 @@ where
         .next()
         .ok_or_else(|| Error::MissingField(expected.into()))?;
     if field.to_lowercase() != expected {
-        Err(Error::MismatchedField(expected.into(), field.into()))?
+        Err(Error::MismatchedField(expected.into(), field.into()))?;
     }
     let val_str = tokens_it
         .next()
@@ -254,17 +264,17 @@ where
     Error: From<<T as FromStr>::Err>,
 {
     let expected_prefix = format!("{expected_prefix}corner or {expected_prefix}center");
-    let line = line.ok_or_else(|| Error::MissingField(expected_prefix.to_owned()))??;
+    let line = line.ok_or_else(|| Error::MissingField(expected_prefix.clone()))??;
     let mut tokens_it = line.split_whitespace();
 
     let field = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingField(expected_prefix.to_owned()))?;
+        .ok_or_else(|| Error::MissingField(expected_prefix.clone()))?;
     let corner_type = CornerType::from_str(field)?;
 
     let value_str = tokens_it
         .next()
-        .ok_or_else(|| Error::MissingValue(expected_prefix.to_owned()))?;
+        .ok_or_else(|| Error::MissingValue(expected_prefix.clone()))?;
     let value = value_str
         .parse()
         .map_err(|_| Error::TypeCast(value_str.into(), field.into(), std::any::type_name::<T>()))?;
