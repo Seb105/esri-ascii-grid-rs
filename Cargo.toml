@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 readme = "readme.md"
 keywords = ["ESRI", "ASCII", "asc", "grid", "raster"]
 repository = "https://github.com/Seb105/esri-ascii-grid-rs"
+exclude = ["/test_data"]
 
 [profile.dev]
 # Full backtraces in debug mode
